@@ -1,0 +1,8 @@
+pymdp>=1.0.0
+jax[cpu]>=0.4.20
+jaxlib>=0.4.20
+equinox>=0.11.0
+numpy>=1.24
+matplotlib>=3.7
+pandas>=2.0
+scipy>=1.10

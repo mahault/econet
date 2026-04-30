@@ -1,0 +1,308 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, allcolors=blue}
+\usepackage{booktabs}
+
+\newcommand{\reviewercomment}[1]{\textit{#1}}
+\newcommand{\response}{\textbf{Response:}\ }
+
+\title{Response to Reviewers\\[0.5em]
+\large EcoNet: Multiagent Planning and Control of Household Energy Resources Using Active Inference}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+We thank the reviewers for their careful reading of our manuscript and their constructive feedback. We have revised the paper substantially in response to these comments. Below we address each point in detail, with references to the revised manuscript (mainV5.tex). All major changes are summarized as follows:
+
+\begin{itemize}
+    \item Expanded Introduction (Section~1) articulating advantages of active inference over RL and MPC.
+    \item New Section~5.3: Economic Analysis and Baseline Comparison (Table~1, Figure~9).
+    \item New Section~5.4: Climate Sensitivity with Real Weather Data from four cities across two seasons (Figures~10, 11, 13, 14).
+    \item New Section~5.5: Validation (energy balance, thermodynamic consistency, battery constraints, gamma sensitivity---Figure~12).
+    \item New Section~4: Predictive transition matrices for exogenous factors (ToU schedule, occupancy calendar, weather forecast), using known schedules and Gaussian kernels to improve planning accuracy.
+    \item New Section~4: Cost-aware Thermostat Agent with five-factor generative model including energy demand state and cost observation modality, driven by a phantom Battery Agent.
+    \item New Section~4.1: Fifth coordination mode (Sophisticated mutual phantom inference) where each agent maintains a model of the other's decision process.
+    \item New Section~5.7: Cost-aware planning results with predictive $B$ matrices.
+    \item Updated literature review with recent 2024--2025 references.
+    \item Language simplification and formatting corrections throughout.
+\end{itemize}
+
+%% ============================================================
+\section*{Response to Reviewer 1}
+%% ============================================================
+
+\subsection*{Comment 1.1: Novelty not clearly articulated vs RL/MPC}
+
+\reviewercomment{The novelty of the active inference approach relative to existing reinforcement learning (RL) and model predictive control (MPC) methods is not clearly articulated. The authors should explicitly state what advantages their approach offers over these established methods.}
+
+\response We have expanded the Introduction (Section~1, paragraphs~4--5 in the revised manuscript) to explicitly articulate four key advantages of active inference over RL and MPC:
+
+\begin{enumerate}[label=(\alph*)]
+    \item \textbf{Natural uncertainty quantification}: Active inference operates through a generative probabilistic model that inherently quantifies uncertainty over hidden states, parameters, and future observations. In contrast, conventional RL uses point-estimate value functions and MPC typically relies on deterministic or scenario-based optimization.
+    \item \textbf{No training data required}: Unlike RL, which requires extensive trial-and-error interaction or historical datasets for training, active inference agents can operate from the first time step given a specified generative model. The model structure encodes domain knowledge directly.
+    \item \textbf{Principled exploration--exploitation from first principles}: The expected free energy (EFE) objective naturally decomposes into pragmatic (goal-seeking) and epistemic (uncertainty-reducing) terms, yielding a principled exploration--exploitation trade-off without requiring ad hoc mechanisms such as epsilon-greedy schedules or curiosity bonuses.
+    \item \textbf{Conditional preferences easily encoded}: Preferences in active inference are specified as probability distributions over observations (the $C$ vector), which can be made conditional on context (e.g., room occupancy, time-of-use rates) without redesigning the reward function or retraining.
+\end{enumerate}
+
+We have also strengthened Section~2.1 to explicitly contrast these advantages against the known barriers of RL (data intensity, security/robustness, lack of generalizability---per Wang and Hong, 2020) and MPC (requirement for accurate deterministic models).
+
+Additionally, we have introduced \textbf{predictive transition matrices} (Section~4) as a further differentiator: the agent dynamically updates its $B$ matrices for exogenous state factors (ToU schedule, occupancy, outdoor temperature) using available forecast information. This is a natural application of the active inference framework---the agent simply maintains a more accurate generative model---and stands in contrast to RL (which would require retraining) and MPC (which handles forecasts through the objective function rather than the transition model). We also introduce a \textbf{cost-aware Thermostat Agent} (Section~4) that uses a phantom Battery Agent to anticipate cost consequences, and a fifth \textbf{Sophisticated coordination mode} (Section~4.1) where agents maintain phantom models of each other.
+
+\subsection*{Comment 1.2: No economic cost analysis or KPIs}
+
+\reviewercomment{The paper lacks an economic cost analysis and does not present standard key performance indicators (KPIs) for evaluating HEMS performance.}
+
+\response We have added Section~5.3 (``Economic Analysis and Baseline Comparison'') to the revised manuscript. This section introduces Table~1, which compares EcoNet against two baselines across four KPIs:
+
+\begin{table}[h]
+\centering
+\caption*{\textbf{Table~1 (in revised manuscript):} 48-hour performance comparison.}
+\begin{tabular}{lccc}
+\toprule
+\textbf{KPI} & \textbf{EcoNet} & \textbf{No-HEMS} & \textbf{Rule-Based} \\
+\midrule
+Total cost (\$) & 3.17 & 3.38 & 6.63 \\
+GHG emissions (kg CO$_2$e) & 7.25 & 9.42 & 18.32 \\
+Comfort deviation ($^\circ$C-hours) & 22.0 & 64.0 & 31.5 \\
+Battery utilization (\%) & 68.3 & 0.0 & 41.7 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+EcoNet achieves a 6.1\% cost reduction and 23.0\% GHG reduction relative to the No-HEMS baseline, while maintaining substantially better thermal comfort. The Rule-Based baseline (charge during off-peak, discharge during peak, thermostat at fixed setpoints) performs worse on cost because it does not adapt to context. Figure~9 provides a visualization of these comparisons.
+
+\subsection*{Comment 1.3: Only tested on synthetic data for a single climate}
+
+\reviewercomment{The simulation is only conducted using synthetic data representative of a single climate zone. The generalizability of the results to other climates and real-world conditions is unclear.}
+
+\response We have added Section~5.4 (``Climate Sensitivity with Real Weather Data'') in which we test EcoNet across four cities representing distinct climate zones:
+
+\begin{itemize}
+    \item \textbf{London, UK} (temperate oceanic, K\"{o}ppen Cfb)
+    \item \textbf{Phoenix, AZ, USA} (hot arid, K\"{o}ppen BWh)
+    \item \textbf{Montreal, QC, Canada} (cold continental, K\"{o}ppen Dfb)
+    \item \textbf{Miami, FL, USA} (tropical, K\"{o}ppen Am)
+\end{itemize}
+
+Each city is tested across two seasons (summer and winter) using actual hourly temperature observations obtained from NOAA Integrated Surface Database via the Iowa Environmental Mesonet (IEM) ASOS network. Results (Figures~10, 11, 13, 14) demonstrate that EcoNet maintains robust performance across all four climate zones, with cost savings ranging from 4.8\% (Miami summer, low thermal differential) to 9.2\% (Montreal winter, high thermal differential requiring substantial planning-ahead behavior). The 7-day extended simulations (Figure~11) confirm sustained performance without degradation over longer horizons.
+
+\subsection*{Comment 1.4: Limited validation/benchmarking}
+
+\reviewercomment{The paper provides limited validation of the simulation model. There is no systematic verification that the physical model behaves correctly, nor sensitivity analysis of key parameters.}
+
+\response We have added Section~5.5 (``Validation'') which presents four validation checks:
+
+\begin{enumerate}
+    \item \textbf{Energy balance verification}: At every time step, total energy consumed equals grid draw plus solar generation plus battery discharge minus battery charge, within floating-point tolerance ($<10^{-6}$ kWh).
+    \item \textbf{Thermodynamic consistency}: Room temperature transitions obey Newton's law of cooling with the specified thermal time constant. We verify that observed temperature trajectories match analytical solutions to within the discretization resolution.
+    \item \textbf{Battery constraint adherence}: State-of-charge remains within $[0.0, 1.0]$ at all times, and charge/discharge actions are correctly blocked at the specified safety thresholds (SoC $\leq 0.2$ for discharge, SoC $\geq 0.8$ for charge).
+    \item \textbf{Gamma sensitivity analysis} (Figure~12): We vary the preference weighting parameter $\gamma$ (which trades off cost minimization vs.\ comfort maintenance) across a range of $[0.1, 10.0]$ and show that EcoNet degrades gracefully, with cost and comfort KPIs varying monotonically and smoothly.
+\end{enumerate}
+
+\subsection*{Comment 1.5: Literature review needs updating with recent studies}
+
+\reviewercomment{The literature review should be updated with recent (2024--2025) studies on HEMS, RL, and MPC approaches.}
+
+\response We have updated Section~2.1 with the following additions:
+
+\begin{itemize}
+    \item Khabbazi et al.\ (2025)~\cite{khabbazi2025}: A comprehensive review of 24 residential and 80 commercial field demonstrations of MPC and RL for HVAC control, reporting average cost savings of 16\% for residential buildings. This reference was already present in the submitted version (Section~2.1, paragraph~2) but we have now emphasized its significance as the most comprehensive recent benchmark.
+    \item Additional 2024--2025 references on DER coordination, including Smith (2024) on utility-level DER control, Denholm et al.\ (2024) on high-penetration rooftop solar challenges, and Constant et al.\ (2025) on AI governance norms.
+\end{itemize}
+
+The revised Section~2.1 now provides a more current picture of the state of the art, against which the active inference approach can be evaluated.
+
+%% ============================================================
+\section*{Response to Reviewer 2}
+%% ============================================================
+
+\subsection*{Comment 2.1: Language too complex/jargon-heavy}
+
+\reviewercomment{The language in several places is overly complex and laden with technical jargon, which may hinder accessibility for readers outside the active inference community.}
+
+\response We have simplified language throughout the manuscript, with particular attention to:
+
+\begin{itemize}
+    \item \textbf{Abstract}: Reduced sentence complexity and replaced phrases such as ``accommodating uncertainties'' with ``handling uncertain forecasts.'' Made the practical impact explicit (cost reduction, emissions reduction, comfort maintenance).
+    \item \textbf{Introduction}: Replaced multi-clause sentences with shorter, more direct statements. For example, ``The EcoNet project aims to improve energy management and coordination, while taking into account potentially conditional and conflicting goals and preferences, and accommodating inherent uncertainties associated with, for example, forecasts of weather, room occupancy, and energy use and generation'' has been revised to two clearer sentences separating the goal statement from the uncertainty-handling claim.
+    \item \textbf{Section~3 (Active Inference)}: Added brief plain-language explanations alongside formal definitions. For instance, after introducing the ELBO, we add: ``Intuitively, minimizing free energy means finding the simplest explanation of sensory data that is consistent with prior knowledge.''
+\end{itemize}
+
+We have preserved technical precision where necessary for the active inference formalism, but ensured that each technical term is introduced with sufficient context for a general energy-systems audience.
+
+\subsection*{Comment 2.2: Impact statement needs clarification}
+
+\reviewercomment{The impact statement in the abstract and introduction should more clearly articulate the practical significance of this work for the energy management community.}
+
+\response We have revised the abstract to explicitly state the quantitative impact:
+
+\begin{quote}
+``Simulation results demonstrate that EcoNet achieves a 6.1\% reduction in energy costs and a 23.0\% reduction in grid-associated greenhouse gas emissions relative to unmanaged operation, while reducing thermal comfort deviations by 66\%. These results are robust across four distinct climate zones tested with real meteorological data.''
+\end{quote}
+
+The Introduction (Section~1, final paragraph) now contains a clear impact statement connecting the proof-of-concept results to the broader potential for active inference in multi-agent HEMS coordination, with explicit reference to the 16\% average cost savings benchmark reported in recent field demonstrations (Khabbazi et al., 2025).
+
+%% ============================================================
+\section*{Response to Reviewer 3}
+%% ============================================================
+
+\subsection*{Comment 3.1: Need short RL/MPC descriptions in Section~2}
+
+\reviewercomment{Section~2 should include brief formal descriptions of RL and MPC to help readers unfamiliar with these methods understand the comparison.}
+
+\response Section~2.1 already provides narrative descriptions of both RL and MPC. In the revised manuscript, we have enhanced these with brief formal definitions in the opening paragraph of Section~2.1:
+
+\begin{quote}
+``Reinforcement learning (RL) methods seek to maximize a cumulative discounted reward signal, $\sum_{t=0}^{T} \gamma^t r_t$, through trial-and-error interaction with an environment, learning a policy $\pi(a|s)$ that maps states to actions. Model predictive control (MPC) uses rolling-horizon optimization: at each time step, an explicit system model is used to solve a finite-horizon optimal control problem, $\min_{u_{t:t+H}} \sum_{k=0}^{H} \ell(x_k, u_k)$, and only the first control action is applied before re-solving.''
+\end{quote}
+
+These definitions allow readers to appreciate the structural differences when the active inference formulation is subsequently introduced.
+
+\subsection*{Comment 3.2: Need references for Bayes theorem, Jensen's inequality, MLE II}
+
+\reviewercomment{Standard mathematical results (Bayes theorem, Jensen's inequality, Maximum Likelihood Estimation Type II) should be cited with appropriate textbook references.}
+
+\response We have added the following references at the relevant points in Section~3:
+
+\begin{itemize}
+    \item \textbf{Bayes theorem}: Bishop, C.M.\ (2006). \textit{Pattern Recognition and Machine Learning}. Springer. [Cited after Equation~(1).]
+    \item \textbf{Jensen's inequality}: Cover, T.M.\ and Thomas, J.A.\ (2006). \textit{Elements of Information Theory}, 2nd ed. Wiley. [Cited after Equation~(3).]
+    \item \textbf{Type-II Maximum Likelihood Estimation}: MacKay, D.J.C.\ (2003). \textit{Information Theory, Inference, and Learning Algorithms}. Cambridge University Press. [Cited after Equation~(2).]
+\end{itemize}
+
+\subsection*{Comment 3.3: Need baseline comparisons (rule-based, no-HEMS)}
+
+\reviewercomment{The results should include baseline comparisons against a rule-based controller and an unmanaged (no-HEMS) scenario.}
+
+\response This has been addressed in the new Section~5.3 (see our response to Reviewer~1, Comment~1.2 above). We compare EcoNet against:
+
+\begin{itemize}
+    \item \textbf{No-HEMS}: No active management; thermostat remains off, battery unused. This represents the worst case for comfort and a passive baseline for cost (household draws all energy from grid at prevailing rates).
+    \item \textbf{Rule-Based}: A simple time-based controller that charges the battery during off-peak hours, discharges during peak hours, and maintains fixed thermostat setpoints (heat if below 18$^\circ$C, cool if above 24$^\circ$C).
+\end{itemize}
+
+Table~1 and Figure~9 present the quantitative comparison across all four KPIs.
+
+\subsection*{Comment 3.4: Should extend beyond 2-day synthetic---seasonal/7-day simulation}
+
+\reviewercomment{The two-day simulation horizon is too short to demonstrate sustained performance. The authors should extend to at least a 7-day scenario and test across different seasons.}
+
+\response Section~5.4 in the revised manuscript addresses this directly:
+
+\begin{itemize}
+    \item \textbf{7-day simulations}: We run 7-day (168-hour) simulations across all four climate zones. Figure~11 shows the extended Battery Agent behavior over 7 days for Montreal (winter) and Phoenix (summer), demonstrating sustained planning-ahead behavior without performance degradation.
+    \item \textbf{Seasonal variation}: Each city is tested in both summer and winter conditions using real weather data, capturing the seasonal diversity of thermal loads. Figure~13 provides a climate-comparison panel across all eight city-season combinations.
+    \item \textbf{Parameter learning over 10 days}: The learning scenario (Section~5.2) is extended to 10 days, showing full convergence of the learned $B$ matrix by day~5--6 under real weather variability (Figure~14).
+\end{itemize}
+
+\subsection*{Comment 3.5: Fix reference numbering}
+
+\reviewercomment{Reference numbering appears inconsistent in places.}
+
+\response Reference numbering in the manuscript is handled automatically by BibTeX processing with the \texttt{plain} bibliography style, which numbers references sequentially in order of first citation. We have verified that the compiled output produces consistent, sequential numbering throughout. Any inconsistencies observed in a previous version may have resulted from a partial compilation. The revised manuscript has been fully recompiled with all references resolved.
+
+\subsection*{Comment 3.6: Fix stranded referential expressions}
+
+\reviewercomment{There are stranded referential expressions (e.g., dangling ``this'' or ``these'' without clear antecedents) in several places.}
+
+\response We have reviewed the manuscript for stranded referential expressions and corrected them throughout. Specific instances that were fixed include:
+
+\begin{itemize}
+    \item Section~1: ``This paper introduces...'' (retained, clear antecedent).
+    \item Section~2.1: ``These services include...'' was revised to ``Flexibility services include...'' for clarity.
+    \item Section~5: ``This permits us to...'' was revised to ``This experimental setup permits us to...'' to make the antecedent explicit.
+    \item Several other instances of ``this'' and ``these'' were either given explicit noun-phrase complements or restructured.
+\end{itemize}
+
+\subsection*{Comment 3.7: Use citations instead of ``We'' at line 36}
+
+\reviewercomment{At line 36, ``We have explored the use of active inference in sustainability...'' should use a citation-based formulation rather than first person.}
+
+\response The sentence in Section~2.2 (line~273 in the original) has been revised from:
+
+\begin{quote}
+``We have explored the use of active inference in sustainability and resource management more generally [refs].''
+\end{quote}
+
+to:
+
+\begin{quote}
+``Previous work has explored the use of active inference in sustainability and resource management more generally [refs].''
+\end{quote}
+
+This maintains appropriate scholarly distance while retaining the citations.
+
+\subsection*{Comment 3.8: Integrate equation numbers in running text}
+
+\reviewercomment{Equation numbers should be referenced in the running text to improve readability and navigation.}
+
+\response We have added explicit equation references throughout the revised manuscript. Examples include:
+
+\begin{itemize}
+    \item ``...Bayes theorem is given in Equation~(1).''
+    \item ``...Maximum Likelihood Estimation Type~II, as shown in Equation~(2)...''
+    \item ``Using Jensen's inequality and after a series of manipulations, the evidence lower bound (ELBO) is obtained in Equation~(3)...''
+    \item ``...the negative ELBO defines free energy, as expressed in Equation~(4).''
+    \item ``The joint generative model, Equation~(5), specifies...''
+    \item ``Expected free energy, Equation~(6), is evaluated under...''
+\end{itemize}
+
+All numbered equations are now referenced at least once in the surrounding text.
+
+\subsection*{Comment 3.9: Add context for ``B matrix'' first mention}
+
+\reviewercomment{The ``B matrix'' is mentioned without sufficient context on first use. A brief explanation or forward reference should be provided.}
+
+\response The first mention of the $B$ matrix in the Results section (Section~5) now includes a parenthetical forward reference:
+
+\begin{quote}
+``...the $B$ matrix for room temperature (the state transition matrix encoding the thermodynamic model of the house; see Figure~1 and Section~4 for its definition and role in the generative model) is fully uncertain...''
+\end{quote}
+
+Additionally, in Section~4 (Model Description), where the $B$ matrix is formally defined, we have ensured that the explanation appears before any forward-referencing text, and we have added ``(see Figure~1)'' to guide the reader to the graphical depiction of the generative model structure.
+
+%% ============================================================
+\section*{Summary of Changes}
+%% ============================================================
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Reviewer} & \textbf{Issue} & \textbf{Location in Revised Manuscript} \\
+\midrule
+R1-1 & Novelty articulation & Section~1, paragraphs~4--5; Section~4 \\
+R1-2 & Economic KPIs & Section~5.3, Table~1, Figure~9 \\
+R1-3 & Climate generalizability & Section~5.4, Figures~10, 11, 13, 14 \\
+R1-4 & Validation & Section~5.5, Figure~12 \\
+R1-5 & Literature update & Section~2.1 \\
+R2-1 & Language simplification & Throughout (Abstract, Sections~1, 3) \\
+R2-2 & Impact statement & Abstract, Section~1 (final paragraph) \\
+R3-1 & RL/MPC definitions & Section~2.1, opening paragraph \\
+R3-2 & Textbook references & Section~3, after Equations~(1)--(3) \\
+R3-3 & Baseline comparisons & Section~5.3, Table~1, Figure~9 \\
+R3-4 & Extended simulation & Section~5.4, Figures~11, 14 \\
+R3-5 & Reference numbering & Verified via full BibTeX recompilation \\
+R3-6 & Stranded references & Throughout \\
+R3-7 & Citation vs.\ ``We'' & Section~2.2 \\
+R3-8 & Equation numbering & Sections~3 and 4 \\
+R3-9 & B matrix context & Sections~4 and 5 \\
+--- & Predictive $B$ matrices & Section~4 (new) \\
+--- & Cost-aware Thermostat & Section~4 (new) \\
+--- & Sophisticated mode & Section~4.1 (new) \\
+--- & Cost-aware results & Section~5.7 (new) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{1em}
+We believe these revisions substantially strengthen the manuscript and address all reviewer concerns. We thank the reviewers again for their constructive feedback.
+
+\end{document}
