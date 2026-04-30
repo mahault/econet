@@ -144,7 +144,7 @@ class ThermostatAgent:
             )
             self.agent = self.agent.infer_parameters(
                 beliefs_A=beliefs_seq,
-                outcomes=obs,
+                observations=obs,
                 actions=self._action_prev,
                 beliefs_B=beliefs_seq,
                 lr_pB=1.0,
@@ -156,7 +156,7 @@ class ThermostatAgent:
             self._action_prev = action
 
         # Update empirical prior for next step
-        pred, _ = self.agent.update_empirical_prior(action, qs)
+        pred = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         # Convert JAX arrays to numpy for storage
@@ -282,7 +282,7 @@ class BatteryAgent:
         action_int = int(action[0, 0])
 
         # Update empirical prior for next step
-        pred, _ = self.agent.update_empirical_prior(action, qs)
+        pred = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         # Convert JAX arrays to numpy for storage
@@ -565,7 +565,7 @@ class SophisticatedThermostatAgent:
             )
             self.agent = self.agent.infer_parameters(
                 beliefs_A=beliefs_seq,
-                outcomes=obs,
+                observations=obs,
                 actions=self._action_prev,
                 beliefs_B=beliefs_seq,
                 lr_pB=1.0,
@@ -577,7 +577,7 @@ class SophisticatedThermostatAgent:
             self._action_prev = action
 
         # --- Update empirical prior ---
-        pred, _ = self.agent.update_empirical_prior(action, qs)
+        pred = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         q_pi_np = np.asarray(q_pi)
@@ -723,7 +723,7 @@ class SophisticatedBatteryAgent:
         # --- Update empirical prior for next step ---
         # Build action array matching pymdp format: (batch=1, n_factors)
         action_arr = jnp.array([[action_int, 0, 0]])
-        pred, _ = self.agent.update_empirical_prior(action_arr, qs)
+        pred = self.agent.update_empirical_prior(action_arr, qs)
         self._empirical_prior = pred
 
         self.qs_history.append(qs)
@@ -906,7 +906,7 @@ class SophisticatedToMBatteryAgent:
 
         # --- Update empirical prior ---
         action_arr = jnp.array([[action_int, 0, 0]])
-        pred, _ = self.agent.update_empirical_prior(action_arr, qs)
+        pred = self.agent.update_empirical_prior(action_arr, qs)
         self._empirical_prior = pred
 
         self.qs_history.append(qs)
@@ -1102,14 +1102,14 @@ class ToMThermostatAgent:
                 self._qs_prev, qs
             )
             self.agent = self.agent.infer_parameters(
-                beliefs_A=qs, outcomes=obs,
+                beliefs_A=qs, observations=obs,
                 actions=self._action_prev, beliefs_B=beliefs_seq, lr_pB=1.0,
             )
 
         self._qs_prev = qs
         self._action_prev = action
 
-        pred, _ = self.agent.update_empirical_prior(action, qs)
+        pred = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         q_pi_np = np.asarray(q_pi)
@@ -1308,14 +1308,14 @@ class ToMBatteryAgent:
                 self._qs_prev, qs
             )
             self.agent = self.agent.infer_parameters(
-                beliefs_A=qs, outcomes=obs,
+                beliefs_A=qs, observations=obs,
                 actions=self._action_prev, beliefs_B=beliefs_seq, lr_pB=1.0,
             )
 
         self._qs_prev = qs
         self._action_prev = action
 
-        pred, _ = self.agent.update_empirical_prior(action, qs)
+        pred = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         q_pi_np = np.asarray(q_pi)

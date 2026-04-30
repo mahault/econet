@@ -194,7 +194,7 @@ class PhantomThermostat:
         action = self.agent.sample_action(q_pi)
 
         # Update empirical prior for next step
-        pred, _ = self.agent.update_empirical_prior(action, qs)
+        pred = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
         self._qs_prev = qs
         self._action_prev = action
@@ -362,7 +362,7 @@ class PhantomBattery:
         # Select action for empirical prior update
         self._rng_key, _ = jr.split(self._rng_key)
         action = self.agent.sample_action(q_pi)
-        pred, _ = self.agent.update_empirical_prior(action, qs)
+        pred = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         # Track estimated SoC for next step
