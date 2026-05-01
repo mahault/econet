@@ -350,7 +350,7 @@ management. However, the study of active inference in this domain
 is very new.
 
 To the best of our knowledge, only a few studies exist on the topic.
-Boik et al. have explored the use of active inference in sustainability and
+Albarracin et al. have explored the use of active inference in sustainability and
 resource management more generally \cite{albarracin2024sustainability,albarracin2024modeling}.
 Specific to HEMS, Nazemi et al. propose a dual-layer, hybrid active
 inference architecture for tackling both building- and community-level
@@ -407,14 +407,15 @@ where the marginal likelihood $p(x)$ is called the \textit{model
 evidence}. The right-hand side of Equation~\ref{eq:bayes} is the \textit{likelihood} times \textit{prior,
 $p(\theta)$,} divided by the evidence. The left-hand side is the
 \textit{posterior,} which is the updated prior after seeing the data.
-A typical approach to estimate $\theta$ is Maximum Likelihood Estimation
-II (also called empirical Bayes or evidence maximization; see \cite{bishop2006}):
+Maximum Likelihood Estimation II (also called empirical Bayes or
+evidence maximization; see \cite{bishop2006}) estimates $\theta$ by
+maximizing the model evidence:
 
 \begin{equation}
-p(\theta|x)=\underset{\theta}{\mathrm{arg\,max}}\int p(x\mid\theta)\,p(\theta)\D\theta\,.\label{eq:mle2}
+p(x)=\int p(x\mid\theta)\,p(\theta)\D\theta\,.\label{eq:mle2}
 \end{equation}
 
-Commonly, the integral in Equation~\ref{eq:mle2} is intractable. Progress is made by maximizing
+Commonly, this integral is intractable. Progress is made by maximizing
 a lower bound called the \textit{variational lower bound} or \textit{evidence
 lower bound} (ELBO). It can be derived by choosing a distribution
 $q(\theta)$ that is similar to but simpler than $p(\theta\mid x)$,
@@ -1652,7 +1653,7 @@ greenhouse gas emissions, and increase grid stability and function
 \cite{khabbazi2025,Mahapatra2022-zp,Martinez-2021,Tuomela-2021}.
 To highlight one example, Gualandri and Kuzior \cite{Gualandri-2023}
 demonstrate that increased adoption of HEMS could dramatically reduce
-residential-energy consumption in Spain, which in their view could
+residential-energy consumption in Italy, which in their view could
 help the country to achieve 2030 European energy targets. The degree
 of future HEMS adoption depends of course on choices made by manufacturers,
 utilities, consumer groups, end users, policymakers, and other stakeholders,
@@ -1697,9 +1698,10 @@ of a household, and so also its expected energy impacts on the grid?
 
 \subsection{Availability of Data and Material}
 
-The synthetic data and simulation code used in this paper are available
-upon reasonable request. Real weather data were obtained from the Iowa
-Environmental Mesonet (IEM) ASOS network, which is publicly accessible.
+The simulation code and synthetic data generation scripts are publicly
+available at \url{https://github.com/mahault/econet}. Real weather data
+were obtained from the Iowa Environmental Mesonet (IEM) ASOS network,
+which is publicly accessible.
 
 \subsection{Competing Interests}
 
