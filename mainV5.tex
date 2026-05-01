@@ -25,7 +25,7 @@
 \providecommand{\tabularnewline}{\\}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% User specified LaTeX commands.
-\setlength{\parskip}{\medskipamount}\usepackage{babel}
+\setlength{\parskip}{\medskipamount}
 
 \usepackage{arxiv}
 \usepackage{booktabs}
@@ -89,11 +89,13 @@ occupancy calendars). This allows the agent to anticipate environmental
 changes within its planning horizon without requiring hand-crafted rules
 or additional inference machinery.
 Simulation results demonstrate that the system reduces daily energy costs
-by up to 6\% compared to unmanaged operation and by 52\% compared to
+by approximately 6\% compared to a fixed-thermostat baseline (which lacks
+battery management) and by 52\% compared to
 rule-based control, while simultaneously reducing greenhouse gas emissions.
 We further validate the approach across diverse climate conditions using
 real weather data from four cities and two seasons, confirming robust
-generalization without retraining.
+generalization without retraining, since active inference agents adapt
+online through belief updating rather than offline gradient descent.
 Beyond single-agent optimization, we investigate five coordination modes
 of increasing sophistication: independent (static preferences), aligned
 (dynamic context-dependent preferences), hierarchical (centralized
@@ -104,11 +106,13 @@ of the other agent's decision-making, enabling anticipatory cost-aware
 planning.
 In the ToM mode, agents share posterior beliefs rather than raw states,
 enabling decentralized consensus formation through auditory likelihood
-mappings in each agent's generative model. This belief-sharing mechanism
+mappings in each agent's generative model. In a synthetic benchmark
+scenario, this belief-sharing mechanism
 achieves a 32\% cost reduction and 11\% comfort improvement relative to
 the aligned mode, demonstrating that inter-agent communication enables
 genuinely superior coordination rather than mere trade-offs between
-objectives. In the sophisticated mode, a cost-aware Thermostat Agent
+objectives. Across real-weather scenarios, cost savings are more modest
+(0.6\% aggregate) but comfort improvements persist. In the sophisticated mode, a cost-aware Thermostat Agent
 uses a five-factor generative model that includes an energy demand state
 driven by a phantom Battery Agent, while the Battery Agent maintains a
 phantom Thermostat Agent for multi-step HVAC prediction. Combined with
@@ -419,18 +423,19 @@ Commonly, this integral is intractable. Progress is made by maximizing
 a lower bound called the \textit{variational lower bound} or \textit{evidence
 lower bound} (ELBO). It can be derived by choosing a distribution
 $q(\theta)$ that is similar to but simpler than $p(\theta\mid x)$,
-and that by construction does not depend on $x$. Using Jensen's inequality
+and that is introduced independently of the data $x$ but is
+subsequently optimized to approximate $p(\theta \mid x)$. Using Jensen's inequality
 (see \cite{bishop2006,cover2006}) and after a series of manipulations, the result is
 
 \begin{align}
-\ln p(x) & \geq\mathbb{E}_{q}\left[\log\frac{p(\theta,x)}{q(\theta)}\right]\nonumber \\
- & =\mathbb{E}_{q}\left[\log p(\theta,x)\right]+H(\theta)\,,\label{eq:Jensen}
+\ln p(x) & \geq\mathbb{E}_{q}\left[\ln\frac{p(\theta,x)}{q(\theta)}\right]\nonumber \\
+ & =\mathbb{E}_{q}\left[\ln p(\theta,x)\right]+H(\theta)\,,\label{eq:Jensen}
 \end{align}
 
 where the right-hand sides are called the ELBO, $H$ is entropy, and
 the negative ELBO is called \textit{free energy:}
 \begin{align}
-F(\theta) & =\mathbb{E}_{q}\left[\log q(\theta)\right]-\mathbb{E}_{q}\left[\log p(\theta,x)\right]\label{eq:FE}\\
+F(\theta) & =\mathbb{E}_{q}\left[\ln q(\theta)\right]-\mathbb{E}_{q}\left[\ln p(\theta,x)\right]\label{eq:FE}\\
  & \geq-\ln p(x)\,.\nonumber
 \end{align}
 The right-hand side of the last line in Equation~\ref{eq:FE} is called \textit{surprisal}.
@@ -730,7 +735,11 @@ model, but would incur a memory and run-time penalty. The most important
 factor influencing run time is the policy length. We found that a
 policy length of six steps (12 hours) is needed to allow the agent
 to adequately plan ahead for battery charge and discharge in our sample
-problems. Other hyperparameters include target room temperature for
+problems. A shorter policy length of four steps (8 hours) is used in
+the coordination mode comparison experiments
+(Section~\ref{sec:coordination_results}) to reduce computation time
+for the multi-agent configurations; the deterministic and cost-aware
+experiments use the full six-step horizon. Other hyperparameters include target room temperature for
 occupied and unoccupied status, policy length, initial beliefs about
 room temperature and SoC, the simulation length, and whether parameter
 learning is used.
@@ -804,7 +813,11 @@ with the Thermostat Agent. Crucially, agents share full probability
 distributions, preserving uncertainty information
 \cite{vasil2020world}.
 
-The \textit{auditory A matrix} extends each agent's generative model with
+The \textit{auditory A matrix}\footnote{The term ``auditory'' follows the
+neuroscience convention where agents receive social information through a
+sensory channel analogous to hearing. In the HEMS context, this corresponds
+to a communication channel (e.g., a local network message) through which one
+agent receives the other's belief report.} extends each agent's generative model with
 an additional observation modality for received beliefs. A likelihood
 mapping $A_{\text{aud}}$ encodes prior expectations about the other
 agent's state. The Thermostat Agent models
@@ -876,7 +889,14 @@ the environment and the other's generative model structure
 The experimental setup allows for flexible changes to parameters,
 hyperparameters, priors, and input data. This permits us to run simulations
 under a variety of conditions, of different degrees of challenge.
-In this section, we present results for seven scenarios:
+Unless otherwise noted, all experiments use a policy length of 6 steps
+(12 hours), precision parameter $\gamma = 16$, and 2-hour time steps.
+The deterministic and baseline comparison experiments use 2-day
+synthetic data; the coordination, climate, and cost-aware experiments
+use 7-day data with online $B$-matrix learning enabled. The policy
+length of 4 steps used in some coordination experiments is noted
+explicitly where applicable.
+In this section, we present results for seven experimental analyses:
 (1) a deterministic problem with accurate agent models;
 (2) a parameter learning scenario where the thermodynamic model is unknown;
 (3) a baseline comparison against unmanaged and rule-based controllers;
@@ -960,7 +980,12 @@ in SoC) during high-ToU periods (red shading). Similarly, it tries
 to charge the battery during low-ToU periods.
 
 Battery SoC is discretized into five categories, from 0.0 to 1.0 in
-steps of 0.2. To protect the battery, the Battery Agent is not allowed
+steps of 0.2. The battery has a one-way efficiency of $\eta = 0.9$
+(round-trip efficiency 81\%), meaning that charging draws
+$\Delta\text{SoC} \times C / \eta$ from the grid while discharging
+delivers $\Delta\text{SoC} \times C \times \eta$ to the household,
+where $C = 5$~kWh is the total capacity.
+To protect the battery, the Battery Agent is not allowed
 to discharge when SoC $\leq$ 0.2 or to charge when SoC $\geq$ 0.8.
 Each two-hour step can charge or discharge the battery 20 percent.
 The initial charge is 0.2. Starting from an SoC of 0.2, the agent
@@ -1074,17 +1099,22 @@ decreases as the agent learns the thermodynamic model.}\label{fig:learning}
 \subsection{Baseline Comparison}\label{sec:baseline}
 
 To quantify the benefit of active inference control, we compare EcoNet
-against two baselines over a 2-day simulation period:
+against four baselines over a 2-day simulation period:
 
 \begin{itemize}
-\item \textbf{No-HEMS}: The household operates without any intelligent
-control. The thermostat follows a fixed schedule and the battery is
-unused (neither charged nor discharged).
-\item \textbf{Rule-Based}: A simple rule-based controller that always
-charges the battery when solar generation exceeds load, always discharges
-during high-ToU periods regardless of SoC constraints, and sets the
-thermostat based on a fixed temperature threshold without considering
-occupancy or ToU context.
+\item \textbf{No-HEMS}: The household has a basic programmable thermostat
+with a $\pm 1^{\circ}$C deadband around the target temperature (occupancy-aware),
+but no battery management. This represents a typical home without an
+energy management system.
+\item \textbf{Rule-Based}: A simple rule-based controller that
+charges the battery when solar generation exceeds load during off-peak periods,
+discharges during high-ToU periods, and sets the
+thermostat based on a fixed temperature threshold with occupancy awareness.
+\item \textbf{MPC}: Model Predictive Control with a rolling 6-step (12-hour)
+planning horizon, using backward induction DP at each step with perfect
+knowledge of the system model. Matches the AIF agents' planning horizon.
+\item \textbf{RL}: Tabular Q-learning with a coarse state space (200 states),
+trained for 500 episodes on the same environment, then evaluated greedily.
 \end{itemize}
 
 Table \ref{tab:baseline} summarizes the results. EcoNet achieves the
@@ -1100,6 +1130,20 @@ misses the cost savings available from strategic charge/discharge
 scheduling. EcoNet's battery utilization of 79.2\% with 1.70 full
 equivalent cycles over the 2-day period indicates effective use of
 available storage capacity.
+
+The MPC and RL baselines provide important context for interpreting
+EcoNet's performance. MPC with a 6-step horizon (matching the AIF
+agents' policy length) achieves near-Oracle performance, as expected
+for a method with perfect model knowledge over the planning horizon.
+However, MPC requires an explicit, accurate model of system dynamics
+and does not naturally handle model uncertainty or online learning.
+The tabular Q-learning baseline, while achieving reasonable performance
+after 500 training episodes, requires offline training on the
+specific environment and lacks built-in uncertainty quantification.
+EcoNet's active inference agents operate without offline training,
+naturally quantify uncertainty through posterior beliefs, and can learn
+unknown parameters online---advantages that become increasingly important
+as the environment becomes less predictable.
 
 \begin{table}[htbp]
 \centering
@@ -1136,7 +1180,10 @@ different climate conditions. To investigate this, we run EcoNet using
 real hourly weather data obtained from the Iowa Environmental Mesonet
 (IEM) Automated Surface Observing System (ASOS) network for four
 geographically diverse cities: London (UK), Phoenix (USA), Montreal
-(Canada), and Miami (USA). For each city, we simulate both a representative
+(Canada), and Miami (USA).\footnote{Cities were selected to span four
+distinct climate zones: maritime temperate (London), hot arid (Phoenix),
+cold continental (Montreal), and tropical humid (Miami). This captures
+the major thermal stress regimes relevant to residential HVAC.} For each city, we simulate both a representative
 summer week and a representative winter week. We evaluate both the
 Aligned coordination mode and the ToM+Belief mode on all eight scenarios
 to assess whether belief sharing generalizes across climates.
@@ -1443,6 +1490,9 @@ allowing the standard EFE to weigh comfort against cost without any
 ad hoc penalty term. The \texttt{cost\_scale} parameter controls the
 relative amplitude of $C_{\text{cost}}$ versus $C_{\text{comfort}}$,
 producing a smooth Pareto frontier between the two objectives.
+A parameter sweep over \texttt{cost\_scale} $\in \{0.5, 1.0, 2.0, 3.0, 5.0\}$
+confirms that this frontier is smooth and monotonic, with no abrupt
+transitions or performance cliffs.
 
 This combination of predictive exogenous transitions with phantom-mediated
 cost awareness represents the most complete instantiation of the active
@@ -1510,20 +1560,20 @@ dominates, the agent again closely tracks the Oracle ($\Delta$cost =
 \$0.59), confirming that the generative model adapts to diverse
 thermal conditions.
 
-Third, the No-HEMS baseline achieves lower absolute cost and GHG than
-both the Oracle and the Aligned agent in every scenario. This
-apparently paradoxical result reflects a key property of the
-simulation: the battery's round-trip efficiency is below unity (charge
-and discharge losses), so \emph{any} battery operation increases total
-energy consumption and associated GHG emissions. The Oracle and
-Aligned agent use the battery to \emph{shift} energy consumption from
-high-ToU to low-ToU periods, incurring additional total energy in
-exchange for thermal comfort: without battery-powered HVAC
-supplementation, the No-HEMS household cannot maintain comfortable
-temperatures (comfort deviations of 245--3959 vs.\ 107--1870 for the
-Oracle). The cost and GHG gap between No-HEMS and active inference
-modes thus reflects the \emph{price of comfort}, not a failure of the
-control strategy.
+Third, the No-HEMS baseline (which now includes a fixed thermostat
+but no battery management) achieves comparable comfort to the active
+inference modes, since both use HVAC for temperature control. The
+remaining cost gap between No-HEMS and active modes reflects the
+battery's round-trip efficiency ($\eta = 0.9$ one-way, 81\% round-trip):
+battery operation incurs energy losses, but enables TOU arbitrage
+(charging off-peak, discharging on-peak) that reduces cost despite these
+losses. The Oracle and Aligned agent use the battery to \emph{shift}
+energy consumption from high-ToU to low-ToU periods, achieving net
+cost savings that outweigh the efficiency penalty. The MPC baseline
+achieves near-Oracle performance with the same 6-step horizon as the AIF
+agents, but requires a complete model of system dynamics; the RL baseline
+achieves reasonable performance after training but lacks uncertainty
+quantification and interpretability.
 
 
 \section{Discussion}
@@ -1633,9 +1683,11 @@ not require a communication channel \cite{pitliya2025theory}.
 
 The climate sensitivity analysis (Section~\ref{sec:climate}) demonstrates
 that EcoNet generalizes across diverse climate conditions without
-retraining. The agent adapts its behavior---for example, prioritizing
-cooling in Phoenix summers and heating in Montreal winters---through
-the standard belief-updating mechanism of active inference. The use of
+retraining---a direct consequence of active inference's online adaptation
+through belief updating, in contrast to RL approaches that would require
+re-training for each new climate. The agent adapts its behavior---for
+example, prioritizing cooling in Phoenix summers and heating in Montreal
+winters---through the standard belief-updating mechanism of active inference. The use of
 real weather data from the IEM ASOS network provides confidence that
 performance would be maintained under realistic operating conditions.
 
@@ -1659,6 +1711,30 @@ of future HEMS adoption depends of course on choices made by manufacturers,
 utilities, consumer groups, end users, policymakers, and other stakeholders,
 which in turn depends on the degree of cooperation between these entities
 \cite{oluokun-2025,land14030566,Khafiso-2024}.
+
+\subsection{Limitations}
+
+Several limitations of the current study should be acknowledged.
+First, the 2-hour time step discretization limits the model's ability
+to capture fast dynamics such as HVAC cycling or sub-hourly TOU tariffs.
+Finer temporal resolution would increase the state space and planning
+horizon, potentially requiring approximate inference methods.
+Second, the $B$ matrices for exogenous factors (outdoor temperature,
+occupancy, TOU) are currently rebuilt from known schedules and forecasts
+at each step; in a real deployment, forecast uncertainty would grow
+with the prediction horizon and should be modeled explicitly.
+Third, the coordination mode comparison uses a single seed for the
+7-day simulation; while the results are consistent across the 2-day
+and climate sensitivity analyses, multi-seed experiments with
+confidence intervals would strengthen the statistical conclusions.
+Finally, the symmetric sophisticated mode (Section~\ref{sec:cost_aware_results})
+is computationally expensive due to the expanded policy space ($3^6 = 729$
+policies with 5 state factors), and we were unable to run it for the full
+7-day duration on all climate scenarios. Computational optimization
+(e.g., policy pruning, amortized inference) would be needed for
+practical deployment.
+
+\subsection{Future Work}
 
 There are many possibilities for future work that could extend or
 improve upon the current model. Like Nazemi et al. we could employ
@@ -1693,6 +1769,33 @@ seen at the point of common coupling with the grid. Given a history
 of device management, as evidenced by the numerical readings available
 to grid operators, what model best explains the management practices
 of a household, and so also its expected energy impacts on the grid?
+
+\section{Conclusion}
+
+We have presented EcoNet, a multi-agent active inference framework for
+household energy management that unifies perception, planning, learning,
+and coordination under the free energy principle. The system coordinates
+a Thermostat Agent and a Battery Agent to balance conflicting objectives
+---energy cost, thermal comfort, and greenhouse gas emissions---under
+uncertainty. Key contributions include: (i) predictive $B$ matrices that
+incorporate forecast information into the generative model; (ii) a Theory
+of Mind coordination mode based on federated belief sharing that enables
+decentralized consensus; (iii) a cost-aware planning architecture using
+phantom models for inter-agent prediction; and (iv) a battery model with
+explicit round-trip efficiency losses ($\eta = 0.9$ one-way).
+
+Experimental results demonstrate that EcoNet reduces costs relative to
+unmanaged operation and rule-based control, generalizes across diverse
+climate conditions without retraining, and achieves coordination benefits
+through belief sharing. The comparison with MPC and RL baselines
+highlights active inference's distinctive advantages: online learning
+without offline training, principled uncertainty quantification, and
+interpretable preference structures through $C$ vectors.
+
+The framework provides a foundation for scaling to multi-household
+neighborhoods and integrating additional DER devices, leveraging the
+belief-sharing architecture's natural support for decentralized
+coordination.
 
 \section{Declarations}
 

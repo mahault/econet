@@ -21,6 +21,7 @@ from .environment import (
     HVAC_KWH_PER_STEP, SOC_LEVELS, TEMP_LEVELS, TEMP_MIN, TEMP_STEP,
     TARGET_TEMP_OCCUPIED, TARGET_TEMP_UNOCCUPIED,
     ENERGY_LEVELS, BATTERY_CAPACITY_KWH, BATTERY_STEP_FRAC,
+    BATTERY_EFFICIENCY,
     discretize_temp,
 )
 
@@ -459,7 +460,8 @@ class SophisticatedThermostatAgent:
             P(energy' | energy, hvac_action).
         """
         B4 = np.zeros((ENERGY_LEVELS, ENERGY_LEVELS, THERMO_NUM_ACTIONS))
-        batt_kwh = BATTERY_STEP_FRAC * BATTERY_CAPACITY_KWH  # = 1.0
+        batt_kwh_charge = BATTERY_STEP_FRAC * BATTERY_CAPACITY_KWH / BATTERY_EFFICIENCY
+        batt_kwh_discharge = BATTERY_STEP_FRAC * BATTERY_CAPACITY_KWH * BATTERY_EFFICIENCY
         p_charge = float(phantom_probs[0])
         p_discharge = float(phantom_probs[1])
         p_off = float(phantom_probs[2])
@@ -469,8 +471,8 @@ class SophisticatedThermostatAgent:
             for j in range(ENERGY_LEVELS):
                 # Mixture over phantom battery outcomes
                 for batt_shift, p_batt in [
-                    (+batt_kwh, p_charge),
-                    (-batt_kwh, p_discharge),
+                    (+batt_kwh_charge, p_charge),
+                    (-batt_kwh_discharge, p_discharge),
                     (0.0, p_off),
                 ]:
                     delta = round((hvac_kwh + batt_shift) / self._energy_bin_size)

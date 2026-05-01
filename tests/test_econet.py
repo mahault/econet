@@ -15,6 +15,7 @@ from econet.environment import (
     discretize_temp, continuous_temp, discretize_soc, continuous_soc,
     discretize_energy, discretize_cost, discretize_ghg,
     TEMP_MIN, TEMP_MAX, TEMP_STEP, TEMP_LEVELS, SOC_LEVELS, STEPS_PER_DAY,
+    BATTERY_EFFICIENCY, BATTERY_CAPACITY_KWH, BATTERY_STEP_FRAC,
 )
 from econet.generative_model import (
     build_thermostat_A, build_thermostat_B, build_thermostat_C, build_thermostat_D,
@@ -26,7 +27,7 @@ from econet.generative_model import (
     BATTERY_NUM_STATES, BATTERY_NUM_OBS,
     BATTERY_A_DEPS, BATTERY_B_DEPS,
 )
-from econet.baselines import run_no_hems, run_rule_based, run_oracle
+from econet.baselines import run_no_hems, run_rule_based, run_oracle, run_mpc, run_rl
 from econet.metrics import compute_metrics
 from econet.climate import generate_climate_week, CLIMATE_PROFILES
 from econet.validation import (
@@ -261,10 +262,14 @@ class TestBaselines:
     def setup_method(self):
         self.env_data = generate_multi_day(num_days=1, seed=42)
 
-    def test_no_hems_no_energy(self):
+    def test_no_hems_has_thermostat(self):
+        """No-HEMS uses a fixed thermostat but no battery management."""
         result = run_no_hems(self.env_data)
         arr = result.to_arrays()
-        np.testing.assert_array_equal(arr["hvac_energy"], 0.0)
+        # Battery should always be off
+        np.testing.assert_array_equal(arr["battery_energy"], 0.0)
+        # HVAC may be active (deadband thermostat)
+        assert len(result.history) == STEPS_PER_DAY
 
     def test_rule_based_runs(self):
         result = run_rule_based(self.env_data)
@@ -287,6 +292,60 @@ class TestBaselines:
         oracle = run_oracle(self.env_data)
         # Oracle should be at least as cheap as no-HEMS or very close
         assert oracle.total_cost <= no_hems.total_cost + 0.5
+
+    def test_mpc_runs(self):
+        result = run_mpc(self.env_data, horizon=6)
+        assert len(result.history) == STEPS_PER_DAY
+
+    def test_mpc_full_horizon_matches_oracle(self):
+        """MPC with horizon=T should match Oracle (both use backward induction)."""
+        oracle = run_oracle(self.env_data, max_steps=12)
+        mpc = run_mpc(self.env_data, horizon=12)
+        # Costs should be very close (both solve the same DP)
+        assert abs(oracle.total_cost - mpc.total_cost) < 0.1
+
+    def test_rl_runs(self):
+        result = run_rl(self.env_data, num_episodes=50, seed=42)
+        assert len(result.history) == STEPS_PER_DAY
+
+    def test_rl_cost_reasonable(self):
+        """RL should not produce absurd costs (sanity check)."""
+        result = run_rl(self.env_data, num_episodes=100, seed=42)
+        assert result.total_cost >= 0
+        assert result.total_cost < 50  # sanity upper bound
+
+
+class TestBatteryEfficiency:
+    def setup_method(self):
+        self.env_data = generate_multi_day(num_days=1, seed=42)
+
+    def test_charge_uses_more_energy_than_discharge_provides(self):
+        """Battery charging should draw more from grid than discharging supplies."""
+        env = Environment(self.env_data, initial_room_temp=20.0, initial_soc=0.4)
+        # Charge
+        hvac_energy = env.apply_thermostat(2, 0)  # HVAC off
+        charge_record = env.apply_battery(0, 0, hvac_energy)
+
+        env2 = Environment(self.env_data, initial_room_temp=20.0, initial_soc=0.4)
+        hvac_energy2 = env2.apply_thermostat(2, 0)
+        discharge_record = env2.apply_battery(1, 0, hvac_energy2)
+
+        # Charge draws from grid (positive), discharge supplies (negative)
+        assert charge_record.battery_energy > 0
+        assert discharge_record.battery_energy < 0
+        # Charge energy > |discharge energy| due to efficiency losses
+        assert charge_record.battery_energy > abs(discharge_record.battery_energy)
+
+    def test_efficiency_values(self):
+        """Verify the efficiency constant values."""
+        expected_charge = BATTERY_STEP_FRAC * BATTERY_CAPACITY_KWH / BATTERY_EFFICIENCY
+        expected_discharge = BATTERY_STEP_FRAC * BATTERY_CAPACITY_KWH * BATTERY_EFFICIENCY
+        # Charge: 0.2 * 5.0 / 0.9 ≈ 1.111 kWh
+        assert abs(expected_charge - 1.0 / 0.9) < 0.01
+        # Discharge: 0.2 * 5.0 * 0.9 = 0.9 kWh
+        assert abs(expected_discharge - 0.9) < 0.01
+        # Round-trip efficiency
+        assert abs(BATTERY_EFFICIENCY ** 2 - 0.81) < 0.01
 
 
 # =========================================================================

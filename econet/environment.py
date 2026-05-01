@@ -29,6 +29,7 @@ BATTERY_STEP_FRAC = 0.2         # 20 % of capacity per step
 SOC_MIN_DISCHARGE = 0.2         # cannot discharge below this
 SOC_MAX_CHARGE = 0.8            # cannot charge above this
 HVAC_KWH_PER_STEP = 1.5         # kWh consumed when HVAC is active
+BATTERY_EFFICIENCY = 0.9         # one-way efficiency; round-trip = 0.81
 
 # Comfort targets
 TARGET_TEMP_OCCUPIED = 18       # °C
@@ -290,7 +291,13 @@ class Environment:
         self.soc = np.clip(self.soc + batt_delta, 0.0, 1.0)
 
         # battery_energy: positive = consuming from grid, negative = supplying
-        battery_energy_kwh = batt_delta * BATTERY_CAPACITY_KWH  # +1 kWh charge, -1 discharge
+        # Asymmetric efficiency: charging draws more from grid, discharging delivers less
+        if batt_delta > 0:  # charging: grid delivers more than stored
+            battery_energy_kwh = batt_delta * BATTERY_CAPACITY_KWH / BATTERY_EFFICIENCY
+        elif batt_delta < 0:  # discharging: less delivered than drawn from battery
+            battery_energy_kwh = batt_delta * BATTERY_CAPACITY_KWH * BATTERY_EFFICIENCY
+        else:
+            battery_energy_kwh = 0.0
 
         total_energy = baseline + hvac_energy + battery_energy_kwh - solar
         tou_val = self.data["tou_value"][step]
