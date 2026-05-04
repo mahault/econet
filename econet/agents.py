@@ -26,6 +26,60 @@ from .environment import (
 )
 
 
+# ======================================================================
+# Predictive B matrix helpers (shared by standard + ToM agents)
+# ======================================================================
+
+def _build_thermo_predictive_B(env_data, step_idx):
+    """Build 1-step-ahead B matrices for thermostat exogenous factors.
+
+    Uses known schedules (TOU, occupancy) and weather forecast (outdoor temp)
+    to build transition matrices that encode what the agent expects NEXT step.
+
+    Returns (B1, B2, B3) for outdoor_temp, occupancy, tou_high.
+    """
+    total = len(env_data["outdoor_temp"])
+    next_idx = min(step_idx + 1, total - 1)
+
+    # B[1]: Outdoor temp (Gaussian around forecast, sigma=1.0 bin)
+    next_temp = env_data["outdoor_temp"][next_idx]
+    next_temp_idx = discretize_temp(next_temp)
+    B1 = np.zeros((TEMP_LEVELS, TEMP_LEVELS, 1))
+    for prev in range(TEMP_LEVELS):
+        for delta in range(-3, 4):
+            nxt = next_temp_idx + delta
+            if 0 <= nxt < TEMP_LEVELS:
+                w = np.exp(-0.5 * (delta / 1.0) ** 2)
+                B1[nxt, prev, 0] += w
+        col_sum = B1[:, prev, 0].sum()
+        if col_sum > 0:
+            B1[:, prev, 0] /= col_sum
+
+    # B[2]: Occupancy (deterministic calendar)
+    next_occ = int(env_data["occupancy"][next_idx])
+    B2 = np.zeros((2, 2, 1))
+    B2[next_occ, :, 0] = 1.0
+
+    # B[3]: TOU (deterministic schedule)
+    next_tou = int(env_data["tou_high"][next_idx])
+    B3 = np.zeros((2, 2, 1))
+    B3[next_tou, :, 0] = 1.0
+
+    return B1, B2, B3
+
+
+def _build_battery_predictive_tou(env_data, step_idx):
+    """Build 1-step-ahead TOU B matrix for battery agent."""
+    total = len(env_data["tou_high"])
+    next_idx = min(step_idx + 1, total - 1)
+
+    next_tou = int(env_data["tou_high"][next_idx])
+    B1 = np.zeros((2, 2, 1))
+    B1[next_tou, :, 0] = 1.0
+
+    return B1
+
+
 class ThermostatAgent:
     """Active inference thermostat agent.
 
@@ -73,6 +127,7 @@ class ThermostatAgent:
         )
         self.learn_B = learn_B
         self.aligned = aligned
+        self._env_data = env_data
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(0)
         self.qs_history = []
@@ -82,13 +137,16 @@ class ThermostatAgent:
         self._qs_prev = None
         self._action_prev = None
 
-    def step(self, obs_dict: dict) -> tuple:
+    def step(self, obs_dict: dict, step_idx: int = None) -> tuple:
         """Run one inference step.
 
         Parameters
         ----------
         obs_dict : dict
             Keys: room_temp, outdoor_temp, occupancy, tou_high (all int indices)
+        step_idx : int, optional
+            Current absolute simulation step. When provided, updates exogenous
+            B matrices with 1-step-ahead forecasts (predictive B).
 
         Returns
         -------
@@ -99,17 +157,27 @@ class ThermostatAgent:
         info : dict
             Contains q_pi and neg_efe for analysis
         """
+        # --- Predictive B matrices for exogenous factors ---
+        if step_idx is not None:
+            B1, B2, B3 = _build_thermo_predictive_B(self._env_data, step_idx)
+            new_B = list(self.agent.B)
+            new_B[1] = jnp.array(B1)[None, :]
+            new_B[2] = jnp.array(B2)[None, :]
+            new_B[3] = jnp.array(B3)[None, :]
+            self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
+
         # --- Dynamic C (aligned mode): shift preference by occupancy + TOU ---
-        # This enables decentralized coordination: thermostat relaxes during
-        # peak TOU, creating space for battery to handle cost reduction.
+        # This enables decentralized coordination: thermostat slightly relaxes
+        # during peak TOU, creating space for battery to handle cost reduction.
         if self.aligned:
             occupancy = obs_dict.get("occupancy", 1)
             tou_high = obs_dict.get("tou_high", 0)
             target = TARGET_TEMP_OCCUPIED if occupancy else TARGET_TEMP_UNOCCUPIED
             target_idx = discretize_temp(target)
-            # Amplitude: strong off-peak (-4.0), relaxed during peak (-1.5)
-            # This implicit "agreement" with battery: I back off at peak, you discharge
-            amplitude = -1.5 if tou_high else -4.0
+            # Amplitude: strong off-peak (-4.0), slightly relaxed during peak (-3.0)
+            # Mild relaxation preserves comfort while signaling battery to discharge.
+            # -3.0 ensures dist=2 penalty (-3.0 nats) dominates info gain (~1 nat).
+            amplitude = -3.0 if tou_high else -4.0
             c_room = np.zeros(TEMP_LEVELS)
             for i in range(TEMP_LEVELS):
                 dist = abs(i - target_idx)
@@ -145,7 +213,7 @@ class ThermostatAgent:
             )
             self.agent = self.agent.infer_parameters(
                 beliefs_A=beliefs_seq,
-                observations=obs,
+                outcomes=obs,
                 actions=self._action_prev,
                 beliefs_B=beliefs_seq,
                 lr_pB=1.0,
@@ -157,7 +225,7 @@ class ThermostatAgent:
             self._action_prev = action
 
         # Update empirical prior for next step
-        pred = self.agent.update_empirical_prior(action, qs)
+        pred, _ = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         # Convert JAX arrays to numpy for storage
@@ -232,18 +300,22 @@ class BatteryAgent:
             batch_size=1,
         )
         self.aligned = aligned
+        self._env_data = env_data
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(1)
         self.qs_history = []
         self.efe_history = []
 
-    def step(self, obs_dict: dict) -> tuple:
+    def step(self, obs_dict: dict, step_idx: int = None) -> tuple:
         """Run one inference step.
 
         Parameters
         ----------
         obs_dict : dict
             Keys: soc, cost, ghg, tou_high (all int indices)
+        step_idx : int, optional
+            Current absolute simulation step. When provided, updates TOU
+            B matrix with 1-step-ahead forecast (predictive B).
 
         Returns
         -------
@@ -252,6 +324,13 @@ class BatteryAgent:
         info : dict
             Contains q_pi and neg_efe for analysis
         """
+        # --- Predictive TOU B matrix ---
+        if step_idx is not None:
+            B1_new = _build_battery_predictive_tou(self._env_data, step_idx)
+            new_B = list(self.agent.B)
+            new_B[1] = jnp.array(B1_new)[None, :]
+            self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
+
         # --- Dynamic C (aligned mode): flip SoC preference based on TOU ---
         # This enables decentralized coordination: battery discharges at peak
         # (offsetting cost from thermostat's HVAC), charges off-peak.
@@ -283,7 +362,7 @@ class BatteryAgent:
         action_int = int(action[0, 0])
 
         # Update empirical prior for next step
-        pred = self.agent.update_empirical_prior(action, qs)
+        pred, _ = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         # Convert JAX arrays to numpy for storage
@@ -567,7 +646,7 @@ class SophisticatedThermostatAgent:
             )
             self.agent = self.agent.infer_parameters(
                 beliefs_A=beliefs_seq,
-                observations=obs,
+                outcomes=obs,
                 actions=self._action_prev,
                 beliefs_B=beliefs_seq,
                 lr_pB=1.0,
@@ -579,7 +658,7 @@ class SophisticatedThermostatAgent:
             self._action_prev = action
 
         # --- Update empirical prior ---
-        pred = self.agent.update_empirical_prior(action, qs)
+        pred, _ = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         q_pi_np = np.asarray(q_pi)
@@ -725,7 +804,7 @@ class SophisticatedBatteryAgent:
         # --- Update empirical prior for next step ---
         # Build action array matching pymdp format: (batch=1, n_factors)
         action_arr = jnp.array([[action_int, 0, 0]])
-        pred = self.agent.update_empirical_prior(action_arr, qs)
+        pred, _ = self.agent.update_empirical_prior(action_arr, qs)
         self._empirical_prior = pred
 
         self.qs_history.append(qs)
@@ -908,7 +987,7 @@ class SophisticatedToMBatteryAgent:
 
         # --- Update empirical prior ---
         action_arr = jnp.array([[action_int, 0, 0]])
-        pred = self.agent.update_empirical_prior(action_arr, qs)
+        pred, _ = self.agent.update_empirical_prior(action_arr, qs)
         self._empirical_prior = pred
 
         self.qs_history.append(qs)
@@ -1005,6 +1084,7 @@ class ToMThermostatAgent:
         )
         self.learn_B = learn_B
         self.social_weight = social_weight
+        self._env_data = env_data
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(10)
         self.qs_history = []
@@ -1022,7 +1102,8 @@ class ToMThermostatAgent:
         else:
             self._base_social_C = None
 
-    def step(self, obs_dict: dict, received_q_soc: np.ndarray = None) -> tuple:
+    def step(self, obs_dict: dict, received_q_soc: np.ndarray = None,
+             step_idx: int = None) -> tuple:
         """Run one inference step with belief sharing.
 
         Parameters
@@ -1031,6 +1112,9 @@ class ToMThermostatAgent:
             Keys: room_temp, outdoor_temp, occupancy, tou_high (all int indices)
         received_q_soc : np.ndarray, optional
             Battery's shared q(SoC) posterior, shape (5,). None on first step.
+        step_idx : int, optional
+            Current absolute simulation step. When provided, updates exogenous
+            B matrices with 1-step-ahead forecasts (predictive B).
 
         Returns
         -------
@@ -1042,6 +1126,15 @@ class ToMThermostatAgent:
             Contains q_pi, neg_efe, q_comfort (shared belief), tom_reliability
         """
         from .tom import belief_to_comfort, belief_to_obs
+
+        # --- Predictive B matrices for exogenous factors ---
+        if step_idx is not None:
+            B1, B2, B3 = _build_thermo_predictive_B(self._env_data, step_idx)
+            new_B = list(self.agent.B)
+            new_B[1] = jnp.array(B1)[None, :]
+            new_B[2] = jnp.array(B2)[None, :]
+            new_B[3] = jnp.array(B3)[None, :]
+            self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
 
         # --- Process received belief from battery ---
         if received_q_soc is not None:
@@ -1063,7 +1156,7 @@ class ToMThermostatAgent:
         tou_high = obs_dict.get("tou_high", 0)
         target = TARGET_TEMP_OCCUPIED if occupancy else TARGET_TEMP_UNOCCUPIED
         target_idx = discretize_temp(target)
-        amplitude = -1.5 if tou_high else -4.0
+        amplitude = -3.0 if tou_high else -4.0
         c_room = np.zeros(TEMP_LEVELS)
         for i in range(TEMP_LEVELS):
             dist = abs(i - target_idx)
@@ -1104,14 +1197,14 @@ class ToMThermostatAgent:
                 self._qs_prev, qs
             )
             self.agent = self.agent.infer_parameters(
-                beliefs_A=qs, observations=obs,
+                beliefs_A=qs, outcomes=obs,
                 actions=self._action_prev, beliefs_B=beliefs_seq, lr_pB=1.0,
             )
 
         self._qs_prev = qs
         self._action_prev = action
 
-        pred = self.agent.update_empirical_prior(action, qs)
+        pred, _ = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         q_pi_np = np.asarray(q_pi)
@@ -1220,6 +1313,7 @@ class ToMBatteryAgent:
         )
         self.learn_B = learn_B
         self.social_weight = social_weight
+        self._env_data = env_data
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(11)
         self.qs_history = []
@@ -1237,7 +1331,8 @@ class ToMBatteryAgent:
         else:
             self._base_social_C = None
 
-    def step(self, obs_dict: dict, received_q_comfort: np.ndarray = None) -> tuple:
+    def step(self, obs_dict: dict, received_q_comfort: np.ndarray = None,
+             step_idx: int = None) -> tuple:
         """Run one inference step with belief sharing.
 
         Parameters
@@ -1246,6 +1341,9 @@ class ToMBatteryAgent:
             Keys: soc, cost, ghg, tou_high (all int indices)
         received_q_comfort : np.ndarray, optional
             Thermostat's shared q(comfort) posterior, shape (5,). None on first step.
+        step_idx : int, optional
+            Current absolute simulation step. When provided, updates TOU
+            B matrix with 1-step-ahead forecast (predictive B).
 
         Returns
         -------
@@ -1255,6 +1353,13 @@ class ToMBatteryAgent:
             Contains q_pi, neg_efe, q_soc (shared belief), tom_reliability
         """
         from .tom import belief_to_obs
+
+        # --- Predictive TOU B matrix ---
+        if step_idx is not None:
+            B1_new = _build_battery_predictive_tou(self._env_data, step_idx)
+            new_B = list(self.agent.B)
+            new_B[1] = jnp.array(B1_new)[None, :]
+            self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
 
         # --- Process received belief from thermostat ---
         if received_q_comfort is not None:
@@ -1310,14 +1415,14 @@ class ToMBatteryAgent:
                 self._qs_prev, qs
             )
             self.agent = self.agent.infer_parameters(
-                beliefs_A=qs, observations=obs,
+                beliefs_A=qs, outcomes=obs,
                 actions=self._action_prev, beliefs_B=beliefs_seq, lr_pB=1.0,
             )
 
         self._qs_prev = qs
         self._action_prev = action
 
-        pred = self.agent.update_empirical_prior(action, qs)
+        pred, _ = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         q_pi_np = np.asarray(q_pi)

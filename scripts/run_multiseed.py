@@ -42,13 +42,13 @@ def run_condition(name, env_data, seed):
         return run_simulation(
             env_data=env_data, num_days=NUM_DAYS,
             policy_len=4, gamma=16.0,
-            learn_B=True, aligned=True, seed=seed, verbose=False,
+            learn_B=False, aligned=True, seed=seed, verbose=False,
         )
     elif name == "tom_belief":
         return run_tom_simulation(
             env_data=env_data, num_days=NUM_DAYS,
             policy_len=4, gamma=16.0,
-            learn_B=True, social_weight=2.0, seed=seed, verbose=False,
+            learn_B=False, social_weight=1.0, seed=seed, verbose=False,
         )
     else:
         raise ValueError(f"Unknown condition: {name}")
@@ -83,12 +83,16 @@ def main():
             for cond in CONDITIONS:
                 print(f"  {scenario_key} / {cond} / seed={seed}...", end=" ", flush=True)
                 t0 = time.time()
-                result = run_condition(cond, env_data, seed)
-                m = compute_metrics(result, num_days=NUM_DAYS)
-                all_results[scenario_key][cond].append(m)
-                dt = time.time() - t0
-                print(f"cost=${m.total_cost:.2f}, comfort={m.comfort_deviation_total:.1f} "
-                      f"({dt:.1f}s)")
+                try:
+                    result = run_condition(cond, env_data, seed)
+                    m = compute_metrics(result, num_days=NUM_DAYS)
+                    all_results[scenario_key][cond].append(m)
+                    dt = time.time() - t0
+                    print(f"cost=${m.total_cost:.2f}, comfort={m.comfort_deviation_total:.1f} "
+                          f"({dt:.1f}s)")
+                except Exception as e:
+                    dt = time.time() - t0
+                    print(f"FAILED ({dt:.1f}s): {e}")
 
     total_time = time.time() - t_start
     print(f"\nTotal time: {total_time:.0f}s")
@@ -102,6 +106,10 @@ def main():
     for scenario_key in all_results:
         for cond in CONDITIONS:
             metrics_list = all_results[scenario_key][cond]
+            if not metrics_list:
+                print(f"{scenario_key:<20} {cond:<14} {'FAILED':<18} {'FAILED':<18} "
+                      f"{'FAILED':<18} {'FAILED':<12}")
+                continue
             costs = [m.total_cost for m in metrics_list]
             comforts = [m.comfort_deviation_total for m in metrics_list]
             ghgs = [m.total_ghg for m in metrics_list]
@@ -129,6 +137,9 @@ def main():
                 all_costs.append(m.total_cost)
                 all_comforts.append(m.comfort_deviation_total)
                 all_ghgs.append(m.total_ghg)
+        if not all_costs:
+            print(f"  {cond:<14}: FAILED (no successful runs)")
+            continue
         print(f"  {cond:<14}: Cost=${np.mean(all_costs):.2f}+/-{np.std(all_costs):.2f}, "
               f"Comfort={np.mean(all_comforts):.1f}+/-{np.std(all_comforts):.1f}, "
               f"GHG={np.mean(all_ghgs):.2f}+/-{np.std(all_ghgs):.2f}")

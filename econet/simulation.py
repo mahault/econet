@@ -147,7 +147,7 @@ def run_simulation(env_data: Optional[dict] = None,
 
         # 2. Thermostat acts first (cascading)
         #    B-learning happens inline in step() when learn_B=True
-        hvac_action, hvac_energy, thermo_info = thermo.step(thermo_obs)
+        hvac_action, hvac_energy, thermo_info = thermo.step(thermo_obs, step_idx=step)
 
         # 3. Apply thermostat action to environment
         actual_hvac_energy = env.apply_thermostat(hvac_action, step)
@@ -156,7 +156,7 @@ def run_simulation(env_data: Optional[dict] = None,
         battery_obs = env.get_battery_obs(step, actual_hvac_energy)
 
         # 5. Battery acts second
-        battery_action, battery_info = battery.step(battery_obs)
+        battery_action, battery_info = battery.step(battery_obs, step_idx=step)
 
         # 6. Apply battery action and record
         record = env.apply_battery(battery_action, step, actual_hvac_energy)
@@ -287,7 +287,7 @@ def run_hierarchical_simulation(
         thermo_obs = env.get_thermostat_obs(step)
 
         # 2. Thermostat acts first (cascading)
-        hvac_action, hvac_energy, thermo_info = thermo.step(thermo_obs)
+        hvac_action, hvac_energy, thermo_info = thermo.step(thermo_obs, step_idx=step)
 
         # 3. Apply thermostat action to environment
         actual_hvac_energy = env.apply_thermostat(hvac_action, step)
@@ -296,7 +296,7 @@ def run_hierarchical_simulation(
         battery_obs = env.get_battery_obs(step, actual_hvac_energy)
 
         # 5. Battery acts second
-        battery_action, battery_info = battery.step(battery_obs)
+        battery_action, battery_info = battery.step(battery_obs, step_idx=step)
 
         # 6. Apply battery action and record
         record = env.apply_battery(battery_action, step, actual_hvac_energy)
@@ -420,7 +420,7 @@ def run_tom_simulation(
 
         # 2. Thermostat infers + acts + produces q(comfort)
         hvac_action, hvac_energy, thermo_info = thermo.step(
-            thermo_obs, received_q_soc=prev_q_soc
+            thermo_obs, received_q_soc=prev_q_soc, step_idx=step
         )
 
         # 3. Apply thermostat action
@@ -432,7 +432,7 @@ def run_tom_simulation(
 
         # 5. Battery infers + acts + produces q(SoC)
         battery_action, battery_info = battery.step(
-            battery_obs, received_q_comfort=q_comfort_shared
+            battery_obs, received_q_comfort=q_comfort_shared, step_idx=step
         )
 
         # 6. Store battery's q(SoC) for thermostat at step t+1

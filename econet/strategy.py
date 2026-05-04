@@ -467,7 +467,7 @@ class StrategyAgent:
             )
             self.agent = self.agent.infer_parameters(
                 beliefs_A=beliefs_seq,
-                observations=obs,
+                outcomes=obs,
                 actions=self._action_prev,
                 beliefs_B=beliefs_seq,
                 lr_pB=1.0,
@@ -477,7 +477,7 @@ class StrategyAgent:
             self._qs_prev = qs
             self._action_prev = action
 
-        pred = self.agent.update_empirical_prior(action, qs)
+        pred, _ = self.agent.update_empirical_prior(action, qs)
         self._empirical_prior = pred
 
         q_pi_np = np.asarray(q_pi)

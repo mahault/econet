@@ -88,10 +88,11 @@ available forecasts (weather predictions, published tariff schedules,
 occupancy calendars). This allows the agent to anticipate environmental
 changes within its planning horizon without requiring hand-crafted rules
 or additional inference machinery.
-Simulation results demonstrate that the system reduces daily energy costs
-by approximately 6\% compared to a fixed-thermostat baseline (which lacks
-battery management) and by 52\% compared to
-rule-based control, while simultaneously reducing greenhouse gas emissions.
+Simulation results across four climate scenarios (5 seeds each)
+demonstrate that the system achieves energy costs within 2\% of a
+perfect-foresight Oracle on average, and up to 17\% below a
+fixed-thermostat baseline lacking battery management, while
+simultaneously reducing greenhouse gas emissions.
 We further validate the approach across diverse climate conditions using
 real weather data from four cities and two seasons, confirming robust
 generalization without retraining, since active inference agents adapt
@@ -106,13 +107,13 @@ of the other agent's decision-making, enabling anticipatory cost-aware
 planning.
 In the ToM mode, agents share posterior beliefs rather than raw states,
 enabling decentralized consensus formation through auditory likelihood
-mappings in each agent's generative model. In a synthetic benchmark
-scenario, this belief-sharing mechanism
-achieves a 32\% cost reduction and 11\% comfort improvement relative to
-the aligned mode, demonstrating that inter-agent communication enables
-genuinely superior coordination rather than mere trade-offs between
-objectives. Across real-weather scenarios, cost savings are more modest
-(0.6\% aggregate) but comfort improvements persist. In the sophisticated mode, a cost-aware Thermostat Agent
+mappings in each agent's generative model. Across four synthetic climate
+scenarios (5 seeds each), the Aligned mode achieves costs within 2\%
+of a perfect-foresight Oracle on average, and the ToM+Belief mode
+provides a further 3\% cost reduction in mild climates where the
+thermostat has meaningful scheduling flexibility. Across real-weather
+scenarios, both modes generalize without retraining, with cost savings
+of 0.6\% aggregate. In the sophisticated mode, a cost-aware Thermostat Agent
 uses a five-factor generative model that includes an energy demand state
 driven by a phantom Battery Agent, while the Battery Agent maintains a
 phantom Thermostat Agent for multi-step HVAC prediction. Combined with
@@ -889,13 +890,17 @@ the environment and the other's generative model structure
 The experimental setup allows for flexible changes to parameters,
 hyperparameters, priors, and input data. This permits us to run simulations
 under a variety of conditions, of different degrees of challenge.
-Unless otherwise noted, all experiments use a policy length of 6 steps
-(12 hours), precision parameter $\gamma = 16$, and 2-hour time steps.
-The deterministic and baseline comparison experiments use 2-day
-synthetic data; the coordination, climate, and cost-aware experiments
-use 7-day data with online $B$-matrix learning enabled. The policy
-length of 4 steps used in some coordination experiments is noted
-explicitly where applicable.
+Unless otherwise noted, all experiments use precision parameter
+$\gamma = 16$ and 2-hour time steps. The deterministic and baseline
+comparison experiments use 2-day synthetic data with a policy length
+of 6 steps (12 hours). The multi-seed coordination and Oracle gap
+experiments (Sections~\ref{sec:coordination_results}
+and~\ref{sec:cost_aware_results}) use 7-day synthetic data, a policy
+length of 4 steps (8 hours), predictive $B$ matrices, and $B$-learning
+disabled (i.e., transition dynamics are specified, not learned online).
+Results are averaged over 5 random seeds
+$\{42, 137, 256, 789, 1024\}$. The cost-aware
+(Sophisticated) mode uses a policy length of 6 steps where noted.
 In this section, we present results for seven experimental analyses:
 (1) a deterministic problem with accurate agent models;
 (2) a parameter learning scenario where the thermodynamic model is unknown;
@@ -1112,27 +1117,27 @@ discharges during high-ToU periods, and sets the
 thermostat based on a fixed temperature threshold with occupancy awareness.
 \item \textbf{MPC}: Model Predictive Control with a rolling 6-step (12-hour)
 planning horizon, using backward induction DP at each step with perfect
-knowledge of the system model. Matches the AIF agents' planning horizon.
+knowledge of the system model.
 \item \textbf{RL}: Tabular Q-learning with a coarse state space (200 states),
 trained for 500 episodes on the same environment, then evaluated greedily.
 \end{itemize}
 
-Table \ref{tab:baseline} summarizes the results. EcoNet achieves the
-lowest total cost (\$3.17) and lowest GHG emissions (7.25 kg CO$_2$),
-representing a 6.2\% cost reduction relative to the No-HEMS baseline and
-a 52.2\% reduction relative to the rule-based controller. The rule-based
-controller performs worst because it does not plan ahead: it cannot
-anticipate high-ToU periods to pre-charge the battery, and its thermostat
-decisions ignore occupancy, leading to unnecessary heating and cooling
-of unoccupied spaces. The No-HEMS baseline avoids the worst excesses
-of the rule-based controller (since the battery is simply off), but
-misses the cost savings available from strategic charge/discharge
-scheduling. EcoNet's battery utilization of 79.2\% with 1.70 full
-equivalent cycles over the 2-day period indicates effective use of
-available storage capacity.
+Table \ref{tab:baseline} summarizes the 2-day results.\footnote{The
+2-day baseline comparison uses the initial experimental configuration
+(policy length 6, single seed). The comprehensive multi-seed evaluation
+is presented in Tables~\ref{tab:coordination} and~\ref{tab:oracle_gap}.}
+EcoNet achieves the lowest total cost (\$3.17) and lowest GHG emissions
+(7.25 kg CO$_2$). The rule-based controller performs worst because it
+does not plan ahead: it cannot anticipate high-ToU periods to pre-charge
+the battery. The No-HEMS baseline avoids the worst excesses of the
+rule-based controller (since the battery is simply off), but misses the
+cost savings available from strategic charge/discharge scheduling.
+EcoNet's battery utilization of 79.2\% with 1.70 full equivalent cycles
+over the 2-day period indicates effective use of available storage
+capacity.
 
 The MPC and RL baselines provide important context for interpreting
-EcoNet's performance. MPC with a 6-step horizon (matching the AIF
+EcoNet's performance. MPC with a 4-step horizon (matching the AIF
 agents' policy length) achieves near-Oracle performance, as expected
 for a method with perfect model knowledge over the planning horizon.
 However, MPC requires an explicit, accurate model of system dynamics
@@ -1330,53 +1335,52 @@ as a function of the softmax inverse temperature parameter.}\label{fig:gamma}
 
 \subsection{Coordination Mode Comparison}\label{sec:coordination_results}
 
-We compare the first four coordination modes described in
-Section~\ref{sec:coordination} over a 7-day simulation with identical
-environmental conditions (seed 42, policy length 4, $\gamma = 16$,
-$B$-matrix learning enabled). Two non-active-inference baselines
-(No-HEMS and rule-based) are included for reference. The fifth mode
-(Sophisticated) is evaluated separately in
-Section~\ref{sec:cost_aware_results}.
+We compare the coordination modes described in
+Section~\ref{sec:coordination} over a 7-day London summer simulation,
+averaged over 5 random seeds (policy length 4, $\gamma = 16$,
+$B$-learning disabled, predictive $B$ matrices enabled). The Oracle
+(backward induction with perfect foresight), MPC (rolling-horizon
+backward induction), and tabular RL baselines are included alongside
+the non-active-inference baselines. The Sophisticated mode
+is evaluated separately in Section~\ref{sec:cost_aware_results}.
 
 Table~\ref{tab:coordination} summarizes the results.
-Several patterns emerge. First, all active inference modes
-outperform the No-HEMS baseline on comfort, confirming the value of
-intelligent HVAC control. The rule-based controller achieves reasonable
-comfort but at inflated cost and emissions due to myopic battery
-management. Second, moving from Independent to Aligned mode
-(introducing dynamic, context-dependent $C$ vectors) yields a
-substantial comfort improvement (168.2 to 111.6~$^{\circ}$C$\cdot$h),
-validating the importance of context-aware preferences.
-Third, the Hierarchical mode provides only marginal improvement over
-Aligned (\$20.95 vs \$21.25), suggesting that centralized coordination
-offers limited additional benefit when agents already share
-environmental context.
+Several patterns emerge. First, all active inference modes achieve
+comfort comparable to the No-HEMS deadband thermostat
+(${\sim}110$~$^{\circ}$C$\cdot$h), confirming that the $C$~vector
+preference structure effectively controls HVAC. The Oracle achieves
+the lowest cost (\$18.14) by optimizing battery scheduling with
+perfect foresight, while MPC closely matches it (\$18.44) with the
+same limited horizon as the AIF agents.
 
-The most striking result is the ToM+Belief mode, which dominates
-the Aligned mode on all three metrics: \$14.43 total cost (32\%
-less than Aligned), 99.5~$^{\circ}$C$\cdot$h comfort deviation
-(11\% better than Aligned), and 35.5~kg GHG (25\% less than Aligned).
-This result, illustrated in the Pareto frontier of Figure~\ref{fig:pareto},
-demonstrates that belief sharing does not merely trade off one objective
-for another but enables genuinely superior coordination.
-By communicating its comfort state, the Thermostat Agent enables the
-Battery Agent to make more informed discharge decisions, while the
-Battery Agent's shared SoC beliefs allow the Thermostat Agent to
-anticipate energy availability and schedule HVAC operation accordingly.
+The Aligned mode achieves \$18.90 (4.2\% above Oracle), demonstrating
+that the active inference agent approaches optimal battery scheduling
+through its generative model. The ToM+Belief mode further reduces cost
+to \$18.37 (1.3\% above Oracle), a 2.8\% improvement over Aligned.
+This improvement, illustrated in the Pareto frontier of
+Figure~\ref{fig:pareto}, arises because belief sharing enables
+the Battery Agent to anticipate HVAC demand and time its
+charge/discharge decisions accordingly.
+The tabular RL baseline performs poorly (\$27.69, 53\% above Oracle)
+with substantially degraded comfort (397.9~$^{\circ}$C$\cdot$h),
+reflecting the challenge of learning effective energy management
+policies from scratch.
 
 \begin{table}[htbp]
 \centering
-\caption{Coordination mode comparison over a 7-day simulation.}\label{tab:coordination}
+\caption{Coordination mode comparison over a 7-day London summer
+simulation, averaged over 5 random seeds.}\label{tab:coordination}
 \begin{tabular}{lccc}
 \toprule
 \textbf{Strategy} & \textbf{Cost (\$)} & \textbf{Comfort ($^{\circ}$C$\cdot$h)} & \textbf{GHG (kg CO$_2$)} \\
 \midrule
-No-HEMS (baseline) & 11.81 & 374.3 & 24.6 \\
-Rule-based & 15.42 & 157.3 & 35.6 \\
-EcoNet: Independent & 19.36 & 168.2 & 42.5 \\
-EcoNet: Aligned & 21.25 & 111.6 & 47.5 \\
-EcoNet: Hierarchical & 20.95 & 111.6 & 46.6 \\
-EcoNet: ToM+Belief & 14.43 & 99.5 & 35.5 \\
+No-HEMS (baseline) & 22.82 & 112.8 & 37.58 \\
+Rule-based          & 19.65 & 112.8 & 34.54 \\
+Oracle              & 18.14 & 113.6 & 32.84 \\
+MPC                 & 18.44 & 113.6 & 33.19 \\
+RL (Q-learning)     & 27.69 & 397.9 & 46.84 \\
+EcoNet: Aligned     & 18.90 & 110.5 & 34.44 \\
+EcoNet: ToM+Belief  & 18.37 & 108.1 & 33.57 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1391,12 +1395,16 @@ cost and comfort.}\label{fig:pareto}
 \end{figure}
 
 Figure~\ref{fig:coordination_bars} shows the comparison across all
-three key metrics. The No-HEMS baseline achieves the lowest absolute
-cost (\$11.81) because it performs no battery charging at all, but
-at the expense of the worst comfort (374.3~$^{\circ}$C$\cdot$h).
-Among active inference modes, the ToM+Belief mode achieves the best
-performance across all three metrics simultaneously, with lower cost,
-better comfort, and reduced emissions compared to every other mode.
+three key metrics. The No-HEMS baseline has the highest cost (\$22.82)
+because its deadband thermostat consumes energy without any battery
+optimization to exploit TOU arbitrage. The Oracle achieves the lowest
+cost (\$18.14) through perfect-foresight battery scheduling.
+Among active inference modes, the Aligned mode (\$18.90, 4.2\% above
+Oracle) and ToM+Belief mode (\$18.37, 1.3\% above Oracle) both
+achieve near-optimal performance, with ToM+Belief providing the best
+comfort (108.1~$^{\circ}$C$\cdot$h) of any condition.
+The tabular RL baseline performs worst on both cost (\$27.69) and
+comfort (397.9~$^{\circ}$C$\cdot$h).
 
 \begin{figure}[htbp]
 \begin{centering}
@@ -1501,79 +1509,108 @@ inference framework for energy management: all relevant information
 inter-agent behavior) enters through the generative model's $B$ matrices
 and is evaluated through a single, unmodified EFE objective.
 
-Table~\ref{tab:oracle_gap} reports the Oracle gap analysis for the
-Aligned condition across four climate scenarios over a 7-day simulation
-with the extended 12-hour (6-step) planning horizon and predictive $B$
-matrices. The Oracle uses backward induction with perfect foresight over
+Table~\ref{tab:oracle_gap} reports the Oracle gap analysis across four
+climate scenarios over a 7-day simulation with an 8-hour (4-step)
+planning horizon and predictive $B$ matrices, averaged over 5 random
+seeds. Two additional baselines are included: MPC (rolling-horizon
+backward induction with the same 4-step horizon as the AIF agents)
+and tabular Q-learning (RL, trained for 500 episodes per seed).
+The Oracle uses backward induction with perfect foresight over
 the full simulation, providing an upper bound on achievable performance.
 
 \begin{table}[htbp]
 \centering
-\caption{Oracle gap analysis over a 7-day simulation with policy length 6
-(12-hour horizon) and predictive $B$ matrices. Gap columns show the
-difference relative to the Oracle (positive = AIF is worse).}\label{tab:oracle_gap}
+\caption{Oracle gap analysis over a 7-day simulation with policy length 4
+(8-hour horizon), predictive $B$ matrices, and $B$-learning disabled.
+Results are averaged over 5 random seeds. Gap columns show the
+difference relative to the Oracle (positive = worse than Oracle).}\label{tab:oracle_gap}
 \begin{tabular}{llcccccc}
 \toprule
 \textbf{Scenario} & \textbf{Condition} & \textbf{Cost (\$)} & \textbf{Comfort} & \textbf{GHG (kg)} & \textbf{Batt\%} & \textbf{$\Delta$Cost} & \textbf{$\Delta$GHG} \\
 \midrule
-\multirow{4}{*}{London summer}
-  & No-HEMS   & 15.57 &  245.0 & 25.51 &   0.0 & $-1.09$ & $-4.96$ \\
-  & Rule-based & 18.75 &  108.6 & 33.08 &  51.2 & $+2.10$ & $+2.60$ \\
-  & Oracle    & 16.66 &  107.3 & 30.48 &  92.9 & --- & --- \\
-  & Aligned   & 19.82 &  159.5 & 35.77 &  97.6 & $+3.17$ & $+5.29$ \\
+\multirow{7}{*}{\rotatebox{90}{London summer}}
+  & No-HEMS    & 22.82 &  112.8 & 37.58 &   0.0 & $+4.68$ & $+4.74$ \\
+  & Rule-based & 19.65 &  112.8 & 34.54 &  51.2 & $+1.51$ & $+1.70$ \\
+  & Oracle     & 18.14 &  113.6 & 32.84 &  81.4 & ---     & ---     \\
+  & MPC        & 18.44 &  113.6 & 33.19 &  75.7 & $+0.30$ & $+0.35$ \\
+  & RL         & 27.69 &  397.9 & 46.84 &  53.1 & $+9.55$ & $+14.00$ \\
+  & Aligned    & 18.90 &  110.5 & 34.44 & 100.0 & $+0.76$ & $+1.60$ \\
+  & ToM+Belief & 18.37 &  108.1 & 33.57 &  77.6 & $+0.23$ & $+0.73$ \\
 \midrule
-\multirow{4}{*}{London winter}
-  & No-HEMS   & 19.54 & 1768.8 & 32.20 &   0.0 & $-12.86$ & $-26.43$ \\
-  & Rule-based & 35.78 &  242.3 & 61.18 &   2.4 & $+3.38$ & $+2.55$ \\
-  & Oracle    & 32.40 &  107.5 & 58.63 &  92.9 & --- & --- \\
-  & Aligned   & 33.66 &  201.4 & 60.98 &  97.6 & $+1.26$ & $+2.35$ \\
+\multirow{7}{*}{\rotatebox{90}{London winter}}
+  & No-HEMS    & 35.69 &  239.8 & 60.99 &   0.0 & $+1.68$ & $+0.09$ \\
+  & Rule-based & 35.19 &  239.8 & 60.27 &   2.4 & $+1.18$ & $-0.63$ \\
+  & Oracle     & 34.01 &  127.2 & 60.90 &  91.2 & ---     & ---     \\
+  & MPC        & 33.78 &  123.7 & 60.29 &  71.7 & $-0.23$ & $-0.61$ \\
+  & RL         & 37.29 &  310.2 & 63.87 &  60.2 & $+3.28$ & $+2.97$ \\
+  & Aligned    & 34.61 &  108.1 & 61.93 &  94.0 & $+0.60$ & $+1.03$ \\
+  & ToM+Belief & 34.46 &  108.1 & 61.61 &  70.2 & $+0.45$ & $+0.71$ \\
 \midrule
-\multirow{4}{*}{Montreal winter}
-  & No-HEMS   &  9.84 & 3958.5 &  4.63 &   0.0 & $-8.70$ & $-3.32$ \\
-  & Rule-based & 20.88 & 1923.0 &  9.51 &   2.4 & $+2.34$ & $+1.56$ \\
-  & Oracle    & 18.54 & 1869.6 &  7.95 &  95.2 & --- & --- \\
-  & Aligned   & 18.78 & 1869.6 &  8.03 & 100.0 & $+0.24$ & $+0.08$ \\
+\multirow{7}{*}{\rotatebox{90}{Montreal winter}}
+  & No-HEMS    & 21.13 & 1920.7 &  9.65 &   0.0 & $+2.04$ & $+1.44$ \\
+  & Rule-based & 20.86 & 1920.7 &  9.50 &   2.4 & $+1.77$ & $+1.29$ \\
+  & Oracle     & 19.09 & 1867.4 &  8.21 &  86.9 & ---     & ---     \\
+  & MPC        & 19.12 & 1867.4 &  8.23 &  70.2 & $+0.03$ & $+0.02$ \\
+  & RL         & 18.77 & 2937.3 &  8.51 &  51.9 & $-0.32$ & $+0.30$ \\
+  & Aligned    & 19.35 & 1867.4 &  8.30 & 100.0 & $+0.26$ & $+0.09$ \\
+  & ToM+Belief & 19.51 & 1867.4 &  8.39 &  99.5 & $+0.42$ & $+0.18$ \\
 \midrule
-\multirow{4}{*}{Phoenix summer}
-  & No-HEMS   & 10.13 & 2940.2 & 24.45 &   0.0 & $-9.01$ & $-28.17$ \\
-  & Rule-based & 20.84 &  851.3 & 54.17 &  51.2 & $+1.70$ & $+1.55$ \\
-  & Oracle    & 19.14 &  851.3 & 52.62 &  91.7 & --- & --- \\
-  & Aligned   & 19.72 &  851.3 & 55.19 &  85.7 & $+0.59$ & $+2.57$ \\
+\multirow{7}{*}{\rotatebox{90}{Phoenix summer}}
+  & No-HEMS    & 27.50 &  853.5 & 63.54 &   0.0 & $+7.79$ & $+9.70$ \\
+  & Rule-based & 21.08 &  853.5 & 54.53 &  51.2 & $+1.37$ & $+0.69$ \\
+  & Oracle     & 19.71 &  853.5 & 53.84 &  71.2 & ---     & ---     \\
+  & MPC        & 19.76 &  853.5 & 54.03 &  71.0 & $+0.05$ & $+0.19$ \\
+  & RL         & 26.87 & 1302.2 & 61.54 &  65.7 & $+7.16$ & $+7.70$ \\
+  & Aligned    & 19.92 &  853.5 & 54.74 &  70.2 & $+0.21$ & $+0.90$ \\
+  & ToM+Belief & 20.51 &  853.5 & 57.34 &  98.8 & $+0.80$ & $+3.50$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Several patterns are notable. First, the Aligned agent closely tracks
-the Oracle across all four climates: the average cost gap is \$1.32
-(6.1\% of Oracle cost) and the average GHG gap is 2.57~kg (5.1\% of
+the Oracle across all four climates: the average cost gap is \$0.46
+(2.0\% of Oracle cost) and the average GHG gap is 0.91~kg (2.3\% of
 Oracle GHG), indicating that the predictive $B$ matrices enable the
 agent to approach globally-optimal battery scheduling despite having
-only a 12-hour rolling horizon.
+only an 8-hour rolling horizon. Results are stable across seeds, with
+standard deviations of \$0.19--0.64 for AIF cost.
 
 Second, the gap is smallest in the most demanding scenarios. In
 Montreal winter, where the extreme cold forces continuous heating
 regardless of strategy, the Aligned agent achieves near-Oracle
-performance ($\Delta$cost = \$0.24, $\Delta$GHG = 0.08~kg), since the
+performance ($\Delta$cost = \$0.26, $\Delta$GHG = 0.09~kg), since the
 dominant cost driver (heating) leaves little room for battery
 optimization differences. In Phoenix summer, where cooling demand
 dominates, the agent again closely tracks the Oracle ($\Delta$cost =
-\$0.59), confirming that the generative model adapts to diverse
-thermal conditions.
+\$0.21), confirming that the generative model adapts to diverse
+thermal conditions. The Aligned agent also achieves \emph{better}
+comfort than the Oracle in London winter (108.1 vs 127.2~$^{\circ}$C$\cdot$h),
+reflecting its strong comfort preference in the $C$ vector.
 
-Third, the No-HEMS baseline (which now includes a fixed thermostat
+Third, the No-HEMS baseline (which includes a fixed thermostat
 but no battery management) achieves comparable comfort to the active
 inference modes, since both use HVAC for temperature control. The
 remaining cost gap between No-HEMS and active modes reflects the
-battery's round-trip efficiency ($\eta = 0.9$ one-way, 81\% round-trip):
-battery operation incurs energy losses, but enables TOU arbitrage
-(charging off-peak, discharging on-peak) that reduces cost despite these
-losses. The Oracle and Aligned agent use the battery to \emph{shift}
-energy consumption from high-ToU to low-ToU periods, achieving net
-cost savings that outweigh the efficiency penalty. The MPC baseline
-achieves near-Oracle performance with the same 6-step horizon as the AIF
-agents, but requires a complete model of system dynamics; the RL baseline
-achieves reasonable performance after training but lacks uncertainty
-quantification and interpretability.
+value of TOU arbitrage: battery operation incurs round-trip losses
+($\eta = 0.9$ one-way, 81\% round-trip), but enables cost savings by
+shifting consumption from high-ToU to low-ToU periods that outweigh
+these losses. The MPC baseline achieves near-Oracle performance with
+the same 4-step horizon as the AIF agents, confirming that the
+limited-horizon planning problem is well-conditioned. However, MPC
+requires a complete model of system dynamics and deterministic
+optimization, whereas the AIF agent learns its generative model
+structure and provides uncertainty quantification through posterior
+beliefs. The tabular RL baseline performs poorly, with costs 20--53\%
+above Oracle and substantially degraded comfort in mild climates,
+reflecting the challenge of learning effective policies from scratch
+with coarse state discretization.
+
+Fourth, the ToM+Belief mode improves on Aligned in mild climates
+(London summer: \$18.37 vs \$18.90, 3\% cost reduction with 2\%
+comfort improvement) where the thermostat has meaningful scheduling
+choices. In extreme climates (Montreal, Phoenix), where HVAC runs
+at capacity regardless, ToM provides no benefit and adds slight
+overhead from belief communication.
 
 
 \section{Discussion}
@@ -1599,38 +1636,44 @@ probabilistic models, however.
 Here we demonstrate a proof-of-concept active inference model. Results
 suggest that the model is able to plan ahead to balance conflicting
 preferences for energy use, energy cost, greenhouse gas emissions,
-and comfort, as well as to learn parameters of an under-specified
-house thermodynamic model. The baseline comparison (Section~\ref{sec:baseline})
-quantifies this advantage: EcoNet reduces costs by 6.2\% relative to
-an unmanaged household and by 52.2\% relative to a naive rule-based
-controller. The cost advantage over the No-HEMS baseline may appear
-modest in absolute terms, but it arises entirely from intelligent battery
-scheduling, without any change to the household's baseline consumption
-patterns. The large gap relative to rule-based control highlights the
-importance of planning ahead (via the 12-hour policy horizon) rather
-than reacting myopically to current conditions.
+and comfort. The multi-seed Oracle gap analysis
+(Section~\ref{sec:cost_aware_results}) provides the most rigorous
+evaluation: across four climate scenarios and five random seeds,
+the Aligned agent achieves costs within 2.0\% of the perfect-foresight
+Oracle on average, with a maximum gap of 4.2\% (London summer). This
+near-optimal performance arises from predictive $B$ matrices that
+enable the agent to anticipate environmental changes within its planning
+horizon. The cost advantage over a fixed-thermostat baseline (up to 17\%
+in mild climates) reflects the value of intelligent battery scheduling
+through TOU arbitrage.
 
 The coordination mode comparison (Section~\ref{sec:coordination_results})
-reveals several important insights. First, context-dependent preferences
-(Aligned mode) substantially outperform static preferences (Independent
-mode) on comfort, confirming that dynamic $C$ vectors are essential for
-effective HEMS operation. Second, centralized coordination (Hierarchical
-mode) offers marginal improvement over decentralized alignment, suggesting
-that when agents share environmental context, explicit top-down control
-adds little value. Third, and most significantly, the ToM+Belief mode
-dominates the Aligned mode on all three objectives simultaneously:
-32\% lower cost, 11\% better comfort, and 25\% lower GHG emissions.
-This is not merely a Pareto trade-off but a genuine coordination
-improvement enabled by inter-agent belief sharing.
+reveals several important insights. First, the Aligned mode achieves
+costs within 4.2\% of the perfect-foresight Oracle in London summer and
+within 1--2\% in extreme climates, demonstrating that the generative model
+with predictive $B$ matrices enables near-optimal battery scheduling.
+Second, MPC with the same planning horizon achieves near-identical
+performance to the AIF agents, confirming that the limited-horizon planning
+problem is well-conditioned; the advantage of AIF lies in its probabilistic
+framework and uncertainty quantification rather than in raw performance.
+Third, the ToM+Belief mode provides modest but consistent improvements
+over Aligned in mild climates (3\% cost reduction in London summer),
+where the thermostat has meaningful scheduling flexibility. In extreme
+climates, where HVAC runs at capacity regardless of strategy, the
+benefit vanishes.
 
-This result supports the theoretical prediction from federated inference
-\cite{friston2024federated}: sharing posterior beliefs (full probability
-distributions, not point estimates) enables agents to form decentralized
-consensus about shared world states. The auditory A matrix formulation
-ensures that social preferences emerge naturally within the standard EFE
-computation (Equation~\ref{eq:social_efe}), requiring no additional
-optimization objective or hand-tuned coordination mechanism. The ToM
-reliability parameter (Equation~\ref{eq:reliability}) provides a
+This result is consistent with the theoretical prediction from federated
+inference \cite{friston2024federated}: sharing posterior beliefs (full
+probability distributions, not point estimates) enables agents to form
+decentralized consensus about shared world states, with the magnitude
+of the benefit depending on the degree of coordination opportunity
+in the environment. The auditory A matrix formulation (explained in
+Section~\ref{sec:tom_mode} as a likelihood mapping that translates
+received beliefs into observation probabilities within the generative
+model) ensures that social preferences emerge naturally within the
+standard EFE computation (Equation~\ref{eq:social_efe}), requiring no
+additional optimization objective or hand-tuned coordination mechanism.
+The ToM reliability parameter (Equation~\ref{eq:reliability}) provides a
 principled mechanism for trust calibration, allowing agents to discount
 unreliable reports, a property that would be essential in real-world
 deployment where sensor noise and communication delays are common.
@@ -1666,15 +1709,18 @@ producing a smooth Pareto frontier without requiring retraining.
 From a broader perspective, the five coordination modes map onto a
 spectrum from fully decentralized (Independent) to fully centralized
 (Hierarchical), with the Aligned, ToM+Belief, and Sophisticated modes
-occupying intermediate positions. The fact that the ToM+Belief mode, a
-purely decentralized architecture, achieves superior performance on all
-metrics relative to both the centralized Hierarchical mode and the
-non-communicating Aligned mode is notable. It suggests that
-peer-to-peer belief sharing may offer a scalable alternative to
-centralized coordination for multi-agent energy management, consistent
-with findings on collective active inference, where ensembles of
-agents coordinating through shared beliefs can achieve emergent
-global behavior \cite{heins2024collective,heins2023spin}. The
+occupying intermediate positions. The ToM+Belief mode, a purely
+decentralized architecture, provides modest improvements over the
+non-communicating Aligned mode in mild climates where the thermostat
+has meaningful scheduling flexibility (3\% cost reduction in London
+summer). In extreme climates where HVAC runs at capacity, the
+coordination opportunity is limited and ToM provides no benefit.
+This environment-dependent benefit suggests that peer-to-peer belief
+sharing is most valuable when agents face genuine coordination
+dilemmas, consistent with findings on collective active inference,
+where ensembles of agents coordinating through shared beliefs can
+achieve emergent global behavior
+\cite{heins2024collective,heins2023spin}. The
 Sophisticated mode offers an alternative path to coordination: rather
 than communicating beliefs directly, each agent maintains a phantom
 model of the other's decision process and anticipates its behavior.
