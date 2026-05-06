@@ -97,7 +97,7 @@ class ThermostatAgent:
 
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, learn_B: bool = False,
-                 aligned: bool = True):
+                 aligned: bool = True, forecast_data: dict = None):
         model = build_thermostat_model(env_data, policy_len=policy_len)
 
         # pB for Dirichlet learning (only B[0] = room_temp factor)
@@ -128,6 +128,7 @@ class ThermostatAgent:
         self.learn_B = learn_B
         self.aligned = aligned
         self._env_data = env_data
+        self._forecast_data = forecast_data if forecast_data is not None else env_data
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(0)
         self.qs_history = []
@@ -159,7 +160,7 @@ class ThermostatAgent:
         """
         # --- Predictive B matrices for exogenous factors ---
         if step_idx is not None:
-            B1, B2, B3 = _build_thermo_predictive_B(self._env_data, step_idx)
+            B1, B2, B3 = _build_thermo_predictive_B(self._forecast_data, step_idx)
             new_B = list(self.agent.B)
             new_B[1] = jnp.array(B1)[None, :]
             new_B[2] = jnp.array(B2)[None, :]
@@ -278,7 +279,7 @@ class BatteryAgent:
 
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, initial_soc: float = 0.5,
-                 aligned: bool = True):
+                 aligned: bool = True, forecast_data: dict = None):
         model = build_battery_model(env_data, initial_soc=initial_soc,
                                     policy_len=policy_len)
 
@@ -301,6 +302,7 @@ class BatteryAgent:
         )
         self.aligned = aligned
         self._env_data = env_data
+        self._forecast_data = forecast_data if forecast_data is not None else env_data
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(1)
         self.qs_history = []
@@ -326,7 +328,7 @@ class BatteryAgent:
         """
         # --- Predictive TOU B matrix ---
         if step_idx is not None:
-            B1_new = _build_battery_predictive_tou(self._env_data, step_idx)
+            B1_new = _build_battery_predictive_tou(self._forecast_data, step_idx)
             new_B = list(self.agent.B)
             new_B[1] = jnp.array(B1_new)[None, :]
             self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
@@ -736,7 +738,8 @@ class SophisticatedBatteryAgent:
         # energy range: -3.0 to +6.0 kWh over 10 bins → bin_size = 1.0
         self._hvac_delta_bins = round(HVAC_KWH_PER_STEP / 1.0)  # = 2
 
-    def step(self, obs_dict: dict, step_idx: int) -> tuple:
+    def step(self, obs_dict: dict, step_idx: int,
+             current_hvac_action: int = None) -> tuple:
         """Run one inference step with sophisticated EFE.
 
         Parameters
@@ -745,6 +748,11 @@ class SophisticatedBatteryAgent:
             Keys: soc, cost, ghg, tou_high (all int indices)
         step_idx : int
             Current absolute simulation step (needed for phantom rollout).
+        current_hvac_action : int, optional
+            Known HVAC action at current step (0=cool, 1=heat, 2=off).
+            When provided, replaces phantom prediction for tau=0 with
+            the actual observation, eliminating prediction error for the
+            first planning step.
 
         Returns
         -------
@@ -754,6 +762,19 @@ class SophisticatedBatteryAgent:
             Contains q_pi, neg_efe, phantom_p_hvac (first step prediction)
         """
         from .sophisticated import compute_sophisticated_efe
+
+        # --- Predictive TOU B matrix (matches standard BatteryAgent) ---
+        B1_new = _build_battery_predictive_tou(self._env_data, step_idx)
+        new_B = list(self.agent.B)
+        new_B[1] = jnp.array(B1_new)[None, :]
+        self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
+
+        # --- Build per-step TOU schedule for custom EFE ---
+        total = len(self._env_data["tou_high"])
+        tou_schedule = []
+        for tau in range(self.policy_len):
+            future_idx = min(step_idx + tau + 1, total - 1)
+            tou_schedule.append(int(self._env_data["tou_high"][future_idx]))
 
         # --- Dynamic C (TOU arbitrage) ---
         tou_high = obs_dict.get("tou_high", 0)
@@ -780,7 +801,13 @@ class SophisticatedBatteryAgent:
             horizon=self.policy_len,
         )
 
-        # --- Custom EFE with step-dependent B[energy] ---
+        # Override tau=0 with known HVAC action (exact observation)
+        if current_hvac_action is not None:
+            known = np.zeros(3)
+            known[current_hvac_action] = 1.0
+            phantom_seq[0] = known
+
+        # --- Custom EFE with step-dependent B[energy] and TOU ---
         q_pi, neg_efe = compute_sophisticated_efe(
             A=self.agent.A,
             B=self.agent.B,
@@ -792,6 +819,7 @@ class SophisticatedBatteryAgent:
             energy_factor_idx=2,
             hvac_delta_bins=self._hvac_delta_bins,
             gamma=self.gamma,
+            tou_schedule=tou_schedule,
         )
 
         # --- Action selection ---
@@ -895,7 +923,8 @@ class SophisticatedToMBatteryAgent:
         return offsets[comfort_idx]
 
     def step(self, obs_dict: dict, step_idx: int,
-             received_q_comfort=None) -> tuple:
+             received_q_comfort=None,
+             current_hvac_action: int = None) -> tuple:
         """Run one inference step with sophisticated EFE + received beliefs.
 
         Parameters
@@ -906,6 +935,8 @@ class SophisticatedToMBatteryAgent:
             Current absolute simulation step.
         received_q_comfort : np.ndarray, optional
             Thermostat's shared q(comfort), shape (5,).
+        current_hvac_action : int, optional
+            Known HVAC action at current step (0=cool, 1=heat, 2=off).
 
         Returns
         -------
@@ -924,6 +955,19 @@ class SophisticatedToMBatteryAgent:
             # Estimate room temp offset from comfort
             self._received_room_temp_est = self._comfort_to_room_temp_idx(
                 received_q_comfort)
+
+        # --- Predictive TOU B matrix ---
+        B1_new = _build_battery_predictive_tou(self._env_data, step_idx)
+        new_B = list(self.agent.B)
+        new_B[1] = jnp.array(B1_new)[None, :]
+        self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
+
+        # --- Build per-step TOU schedule for custom EFE ---
+        total = len(self._env_data["tou_high"])
+        tou_schedule = []
+        for tau in range(self.policy_len):
+            future_idx = min(step_idx + tau + 1, total - 1)
+            tou_schedule.append(int(self._env_data["tou_high"][future_idx]))
 
         # --- Dynamic C (TOU arbitrage) ---
         tou_high = obs_dict.get("tou_high", 0)
@@ -966,7 +1010,13 @@ class SophisticatedToMBatteryAgent:
             phantom_seq = self.phantom.rollout(
                 start_step=step_idx, horizon=self.policy_len)
 
-        # --- Custom EFE with step-dependent B[energy] ---
+        # Override tau=0 with known HVAC action (exact observation)
+        if current_hvac_action is not None:
+            known = np.zeros(3)
+            known[current_hvac_action] = 1.0
+            phantom_seq[0] = known
+
+        # --- Custom EFE with step-dependent B[energy] and TOU ---
         q_pi, neg_efe = compute_sophisticated_efe(
             A=self.agent.A,
             B=self.agent.B,
@@ -978,6 +1028,7 @@ class SophisticatedToMBatteryAgent:
             energy_factor_idx=2,
             hvac_delta_bins=self._hvac_delta_bins,
             gamma=self.gamma,
+            tou_schedule=tou_schedule,
         )
 
         # --- Action selection ---
@@ -1024,7 +1075,8 @@ class ToMThermostatAgent:
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, learn_B: bool = False,
                  social_weight: float = 1.0,
-                 auditory_mode: str = "full"):
+                 auditory_mode: str = "full",
+                 forecast_data: dict = None):
         """
         Parameters
         ----------
@@ -1032,6 +1084,8 @@ class ToMThermostatAgent:
             "full"    — structured auditory A matrix (original behavior)
             "uniform" — auditory A is uniform (no info gain from auditory)
             "none"    — no auditory modality (standard 4-modality model)
+        forecast_data : dict, optional
+            Noisy forecast data for predictive B matrices. If None, uses env_data.
         """
         from .tom import BatteryToM, belief_to_comfort, belief_to_obs
 
@@ -1085,6 +1139,7 @@ class ToMThermostatAgent:
         self.learn_B = learn_B
         self.social_weight = social_weight
         self._env_data = env_data
+        self._forecast_data = forecast_data if forecast_data is not None else env_data
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(10)
         self.qs_history = []
@@ -1129,7 +1184,7 @@ class ToMThermostatAgent:
 
         # --- Predictive B matrices for exogenous factors ---
         if step_idx is not None:
-            B1, B2, B3 = _build_thermo_predictive_B(self._env_data, step_idx)
+            B1, B2, B3 = _build_thermo_predictive_B(self._forecast_data, step_idx)
             new_B = list(self.agent.B)
             new_B[1] = jnp.array(B1)[None, :]
             new_B[2] = jnp.array(B2)[None, :]
@@ -1251,7 +1306,8 @@ class ToMBatteryAgent:
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, initial_soc: float = 0.5,
                  social_weight: float = 1.0, learn_B: bool = False,
-                 auditory_mode: str = "full"):
+                 auditory_mode: str = "full",
+                 forecast_data: dict = None):
         """
         Parameters
         ----------
@@ -1259,6 +1315,8 @@ class ToMBatteryAgent:
             "full"    — structured auditory A matrix (original behavior)
             "uniform" — auditory A is uniform (no info gain from auditory)
             "none"    — no auditory modality (standard 3-modality model)
+        forecast_data : dict, optional
+            Noisy forecast data for predictive B matrices. If None, uses env_data.
         """
         from .tom import ThermostatToM
 
@@ -1314,6 +1372,7 @@ class ToMBatteryAgent:
         self.learn_B = learn_B
         self.social_weight = social_weight
         self._env_data = env_data
+        self._forecast_data = forecast_data if forecast_data is not None else env_data
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(11)
         self.qs_history = []
@@ -1356,7 +1415,7 @@ class ToMBatteryAgent:
 
         # --- Predictive TOU B matrix ---
         if step_idx is not None:
-            B1_new = _build_battery_predictive_tou(self._env_data, step_idx)
+            B1_new = _build_battery_predictive_tou(self._forecast_data, step_idx)
             new_B = list(self.agent.B)
             new_B[1] = jnp.array(B1_new)[None, :]
             self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)

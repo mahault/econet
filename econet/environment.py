@@ -117,6 +117,51 @@ def generate_synthetic_day(day_offset: int = 0,
     }
 
 
+def generate_forecasts(env_data: dict, temp_noise_std: float = 0.0,
+                       solar_noise_std: float = 0.0,
+                       seed: int = 99) -> dict:
+    """Create noisy forecast version of env_data.
+
+    Simulates imperfect weather forecasts by adding noise to
+    outdoor temperature and solar generation. TOU rates, occupancy,
+    and baseline load are treated as known schedules (unchanged).
+
+    Parameters
+    ----------
+    env_data : dict
+        True environment data.
+    temp_noise_std : float
+        Standard deviation of additive Gaussian noise on outdoor_temp (°C).
+    solar_noise_std : float
+        Standard deviation of multiplicative Gaussian noise on solar_gen.
+        E.g., 0.2 means solar_gen *= (1 + N(0, 0.2)).
+    seed : int
+        RNG seed for reproducibility.
+
+    Returns
+    -------
+    dict
+        Copy of env_data with noisy outdoor_temp and solar_gen.
+    """
+    rng = np.random.RandomState(seed)
+    forecast = {k: v.copy() if isinstance(v, np.ndarray) else v
+                for k, v in env_data.items()}
+
+    n = len(env_data["outdoor_temp"])
+
+    if temp_noise_std > 0:
+        noise = rng.normal(0, temp_noise_std, size=n)
+        forecast["outdoor_temp"] = np.clip(
+            env_data["outdoor_temp"] + noise, TEMP_MIN, TEMP_MAX)
+
+    if solar_noise_std > 0:
+        mult = 1.0 + rng.normal(0, solar_noise_std, size=n)
+        forecast["solar_gen"] = np.clip(
+            env_data["solar_gen"] * mult, 0, None)
+
+    return forecast
+
+
 def generate_multi_day(num_days: int = 2, **kwargs) -> dict:
     """Generate multi-day data by concatenating single days."""
     days = []

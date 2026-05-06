@@ -241,7 +241,8 @@ def run_oracle(env_data: dict, initial_room_temp: float = 20.0,
 def run_mpc(env_data: dict, horizon: int = 6,
             comfort_weight: float = 0.3,
             initial_room_temp: float = 20.0,
-            initial_soc: float = 0.5) -> SimulationResult:
+            initial_soc: float = 0.5,
+            forecast_data: dict = None) -> SimulationResult:
     """Baseline 4: MPC — rolling-horizon backward induction with limited foresight.
 
     At each step t, runs backward induction DP over [t, min(t+horizon, T)],
@@ -254,11 +255,17 @@ def run_mpc(env_data: dict, horizon: int = 6,
         Planning horizon (number of future steps). Default 6 (matches AIF policy_len).
     comfort_weight : float
         Weight on comfort penalty relative to cost.
+    forecast_data : dict, optional
+        Noisy forecast data for planning. If None, uses env_data (perfect foresight
+        within horizon). Execution always uses true env_data.
     """
     env = Environment(env_data, initial_room_temp=initial_room_temp,
                       initial_soc=initial_soc)
     total_steps = len(env_data["time_of_day"])
     result = SimulationResult(num_days=total_steps // STEPS_PER_DAY)
+
+    # Plan against forecast_data, execute against env_data
+    plan_data = forecast_data if forecast_data is not None else env_data
 
     num_room = TEMP_LEVELS
     num_soc = SOC_LEVELS
@@ -285,7 +292,7 @@ def run_mpc(env_data: dict, horizon: int = 6,
                             cost, comfort, T_new, new_soc, _, _ = \
                                 _simulate_step_physics(
                                     T_room, soc_val, hvac_a, batt_a,
-                                    step_idx, env_data)
+                                    step_idx, plan_data)
                             r_new = discretize_temp(T_new)
                             s_new = discretize_soc(new_soc)
                             total = cost + comfort_weight * comfort + V[tau + 1, r_new, s_new]
@@ -312,22 +319,26 @@ def run_mpc(env_data: dict, horizon: int = 6,
     return result
 
 
-def run_rl(env_data: dict, num_episodes: int = 500,
+def run_rl(env_data: dict, num_episodes: int = 2000,
            comfort_weight: float = 0.3,
            initial_room_temp: float = 20.0,
            initial_soc: float = 0.5,
            seed: int = 42) -> SimulationResult:
-    """Baseline 5: Tabular Q-learning.
+    """Baseline 5: Tabular Q-learning with time-of-day awareness.
 
-    State: (room_temp_coarse [10 bins], soc [5], tou_high [2], occupancy [2]) = 200 states
+    State: (room_temp_coarse [10], soc [5], tou_high [2], occupancy [2],
+            time_block [4]) = 800 states
     Actions: 9 (3 HVAC x 3 battery)
     Training: num_episodes x T steps, epsilon-greedy (decays 1.0 -> 0.05)
     Evaluation: greedy policy on same env_data
 
+    The time_block feature (4 bins of 6 hours) enables the agent to learn
+    time-aware policies such as pre-charging the battery before peak periods.
+
     Parameters
     ----------
     num_episodes : int
-        Number of training episodes. Default 500.
+        Number of training episodes. Default 2000.
     comfort_weight : float
         Weight on comfort penalty relative to cost.
     seed : int
@@ -336,30 +347,36 @@ def run_rl(env_data: dict, num_episodes: int = 500,
     rng = np.random.RandomState(seed)
     total_steps = len(env_data["time_of_day"])
 
-    # Coarse state discretization: 10 temp bins from TEMP_LEVELS
+    # Coarse state discretization
     def coarse_temp(room_temp):
         frac = (room_temp - TEMP_MIN) / (TEMP_MAX - TEMP_MIN)
         return int(np.clip(int(frac * 10), 0, 9))
 
-    def get_state(room_temp, soc, tou_high, occ):
+    def time_block(step):
+        """Map step within day to 4 time blocks (6h each)."""
+        hour = (step % STEPS_PER_DAY) * 2  # 2h per step
+        return min(int(hour // 6), 3)
+
+    def get_state(room_temp, soc, tou_high, occ, step):
         return (coarse_temp(room_temp), discretize_soc(soc),
-                int(tou_high), int(occ))
+                int(tou_high), int(occ), time_block(step))
 
-    # Q-table: 10 x 5 x 2 x 2 x 9 = 1800 entries
-    Q = np.zeros((10, 5, 2, 2, 9))
+    # Q-table: 10 x 5 x 2 x 2 x 4 x 9 = 7200 entries
+    Q = np.zeros((10, 5, 2, 2, 4, 9))
 
-    alpha = 0.1
+    alpha_init = 0.15
     gamma = 0.99
 
     # Training loop
     for ep in range(num_episodes):
         epsilon = max(0.05, 1.0 - ep / (num_episodes * 0.8))
+        alpha = alpha_init * max(0.3, 1.0 - ep / num_episodes)
         room_temp = initial_room_temp + rng.uniform(-2, 2)
         soc = initial_soc
 
         for t in range(total_steps):
             s = get_state(room_temp, soc,
-                          env_data["tou_high"][t], env_data["occupancy"][t])
+                          env_data["tou_high"][t], env_data["occupancy"][t], t)
 
             # Epsilon-greedy action selection
             if rng.random() < epsilon:
@@ -379,7 +396,7 @@ def run_rl(env_data: dict, num_episodes: int = 500,
             t_next = min(t + 1, total_steps - 1)
             s_next = get_state(T_new, new_soc,
                                env_data["tou_high"][t_next],
-                               env_data["occupancy"][t_next])
+                               env_data["occupancy"][t_next], t_next)
 
             # Q-learning update
             Q[s][action] += alpha * (
@@ -396,7 +413,7 @@ def run_rl(env_data: dict, num_episodes: int = 500,
 
     for t in range(total_steps):
         s = get_state(env.room_temp, env.soc,
-                      env_data["tou_high"][t], env_data["occupancy"][t])
+                      env_data["tou_high"][t], env_data["occupancy"][t], t)
         action = int(np.argmax(Q[s]))
         hvac_a = action // 3
         batt_a = action % 3
@@ -405,6 +422,182 @@ def run_rl(env_data: dict, num_episodes: int = 500,
         record = env.apply_battery(batt_a, t, hvac_energy)
         record.hvac_action = hvac_a
         result.history.append(record)
+
+    return result
+
+
+def _evaluate_greedy(Q, env_data, initial_room_temp, initial_soc,
+                     get_state_fn, num_temp_bins):
+    """Evaluate a Q-table greedily on the environment (epsilon=0).
+
+    Parameters
+    ----------
+    Q : np.ndarray
+        Learned Q-table.
+    env_data : dict
+        Environment data.
+    initial_room_temp, initial_soc : float
+        Initial conditions.
+    get_state_fn : callable
+        State discretization function.
+    num_temp_bins : int
+        Number of temperature bins (for Q-table indexing).
+
+    Returns
+    -------
+    SimulationResult
+    """
+    env = Environment(env_data, initial_room_temp=initial_room_temp,
+                      initial_soc=initial_soc)
+    total_steps = len(env_data["time_of_day"])
+    result = SimulationResult(num_days=total_steps // STEPS_PER_DAY)
+
+    for t in range(total_steps):
+        s = get_state_fn(env.room_temp, env.soc,
+                         env_data["tou_high"][t], env_data["occupancy"][t], t)
+        action = int(np.argmax(Q[s]))
+        hvac_a = action // 3
+        batt_a = action % 3
+
+        hvac_energy = env.apply_thermostat(hvac_a, t)
+        record = env.apply_battery(batt_a, t, hvac_energy)
+        record.hvac_action = hvac_a
+        result.history.append(record)
+
+    return result
+
+
+def run_rl_improved(env_data: dict, num_episodes: int = 10000,
+                    comfort_weight: float = 0.3,
+                    initial_room_temp: float = 20.0,
+                    initial_soc: float = 0.5,
+                    seed: int = 42,
+                    num_temp_bins: int = None,
+                    return_convergence: bool = False,
+                    convergence_interval: int = 500) -> SimulationResult:
+    """Improved tabular Q-learning with AIF-matching discretization.
+
+    Improvements over run_rl:
+    - 34 temp bins (matches AIF's TEMP_LEVELS) instead of 10
+    - More episodes (10,000 default)
+    - Reward normalization (online running mean/std)
+    - Lower final epsilon (0.02 vs 0.05)
+    - Greedy evaluation (separate function, epsilon=0)
+    - Convergence tracking (optional)
+
+    State: (room_temp [34], soc [5], tou_high [2], occupancy [2],
+            time_block [4]) = 2720 states
+    Actions: 9 (3 HVAC x 3 battery) → 24,480 Q entries
+
+    Parameters
+    ----------
+    num_episodes : int
+        Number of training episodes. Default 10,000.
+    comfort_weight : float
+        Weight on comfort penalty relative to cost.
+    seed : int
+        Random seed.
+    num_temp_bins : int, optional
+        Number of temperature bins. Default None = TEMP_LEVELS (34).
+    return_convergence : bool
+        If True, attaches convergence_costs list to result.
+    convergence_interval : int
+        Evaluate greedy policy every this many episodes.
+
+    Returns
+    -------
+    SimulationResult
+        With optional .convergence_costs attribute if return_convergence=True.
+    """
+    rng = np.random.RandomState(seed)
+    total_steps = len(env_data["time_of_day"])
+
+    if num_temp_bins is None:
+        num_temp_bins = TEMP_LEVELS  # 34
+
+    def disc_temp(room_temp):
+        frac = (room_temp - TEMP_MIN) / (TEMP_MAX - TEMP_MIN)
+        return int(np.clip(int(frac * num_temp_bins), 0, num_temp_bins - 1))
+
+    def time_block(step):
+        hour = (step % STEPS_PER_DAY) * 2
+        return min(int(hour // 6), 3)
+
+    def get_state(room_temp, soc, tou_high, occ, step):
+        return (disc_temp(room_temp), discretize_soc(soc),
+                int(tou_high), int(occ), time_block(step))
+
+    # Q-table: num_temp_bins x 5 x 2 x 2 x 4 x 9
+    Q = np.zeros((num_temp_bins, 5, 2, 2, 4, 9))
+
+    alpha_init = 0.15
+    gamma_rl = 0.99
+
+    # Online reward normalization
+    reward_mean = 0.0
+    reward_var = 1.0
+    reward_count = 0
+
+    convergence_costs = []
+
+    for ep in range(num_episodes):
+        epsilon = max(0.02, 1.0 - ep / (num_episodes * 0.8))
+        alpha = alpha_init * max(0.3, 1.0 - ep / num_episodes)
+        room_temp = initial_room_temp + rng.uniform(-2, 2)
+        soc = initial_soc
+
+        for t in range(total_steps):
+            s = get_state(room_temp, soc,
+                          env_data["tou_high"][t], env_data["occupancy"][t], t)
+
+            if rng.random() < epsilon:
+                action = rng.randint(9)
+            else:
+                action = int(np.argmax(Q[s]))
+
+            hvac_a = action // 3
+            batt_a = action % 3
+
+            cost, comfort, T_new, new_soc, _, _ = _simulate_step_physics(
+                room_temp, soc, hvac_a, batt_a, t, env_data)
+
+            raw_reward = -(cost + comfort_weight * comfort)
+
+            # Online normalization
+            reward_count += 1
+            delta = raw_reward - reward_mean
+            reward_mean += delta / reward_count
+            delta2 = raw_reward - reward_mean
+            reward_var += (delta * delta2 - reward_var) / reward_count
+            std = max(np.sqrt(reward_var), 1e-6)
+            reward = (raw_reward - reward_mean) / std
+
+            t_next = min(t + 1, total_steps - 1)
+            s_next = get_state(T_new, new_soc,
+                               env_data["tou_high"][t_next],
+                               env_data["occupancy"][t_next], t_next)
+
+            Q[s][action] += alpha * (
+                reward + gamma_rl * np.max(Q[s_next]) - Q[s][action]
+            )
+
+            room_temp = T_new
+            soc = new_soc
+
+        # Convergence tracking
+        if return_convergence and (ep + 1) % convergence_interval == 0:
+            eval_result = _evaluate_greedy(
+                Q, env_data, initial_room_temp, initial_soc,
+                get_state, num_temp_bins)
+            convergence_costs.append((ep + 1, eval_result.total_cost))
+
+    # Final greedy evaluation
+    result = _evaluate_greedy(
+        Q, env_data, initial_room_temp, initial_soc,
+        get_state, num_temp_bins)
+
+    if return_convergence:
+        result.convergence_costs = convergence_costs
 
     return result
 

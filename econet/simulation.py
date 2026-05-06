@@ -82,7 +82,8 @@ def run_simulation(env_data: Optional[dict] = None,
                    initial_room_temp: float = 20.0,
                    initial_soc: float = 0.5,
                    verbose: bool = True,
-                   seed: int = 42) -> SimulationResult:
+                   seed: int = 42,
+                   forecast_data: dict = None) -> SimulationResult:
     """Run multi-agent EcoNet simulation.
 
     Parameters
@@ -112,6 +113,10 @@ def run_simulation(env_data: Optional[dict] = None,
         Print progress.
     seed : int
         Random seed.
+    forecast_data : dict, optional
+        Noisy forecast data for agent predictive B matrices. If None,
+        agents use true env_data for predictions (perfect foresight).
+        Environment always uses true env_data.
 
     Returns
     -------
@@ -129,9 +134,11 @@ def run_simulation(env_data: Optional[dict] = None,
 
     # Initialize agents
     thermo = ThermostatAgent(env_data, policy_len=policy_len,
-                             gamma=gamma, learn_B=learn_B, aligned=aligned)
+                             gamma=gamma, learn_B=learn_B, aligned=aligned,
+                             forecast_data=forecast_data)
     battery = BatteryAgent(env_data, policy_len=policy_len,
-                           gamma=gamma, initial_soc=initial_soc, aligned=aligned)
+                           gamma=gamma, initial_soc=initial_soc, aligned=aligned,
+                           forecast_data=forecast_data)
 
     result = SimulationResult(
         num_days=num_days, policy_len=policy_len, learn_B=learn_B,
@@ -338,6 +345,7 @@ def run_tom_simulation(
     auditory_mode: str = "full",
     verbose: bool = True,
     seed: int = 42,
+    forecast_data: dict = None,
 ) -> SimulationResult:
     """Run ToM + Belief Sharing simulation.
 
@@ -367,6 +375,10 @@ def run_tom_simulation(
         Print progress.
     seed : int
         Random seed.
+    forecast_data : dict, optional
+        Noisy forecast data for agent predictive B matrices. If None,
+        agents use true env_data for predictions (perfect foresight).
+        Environment always uses true env_data.
 
     Returns
     -------
@@ -384,6 +396,7 @@ def run_tom_simulation(
         env_data, policy_len=policy_len, gamma=gamma,
         learn_B=learn_B, social_weight=social_weight,
         auditory_mode=auditory_mode,
+        forecast_data=forecast_data,
     )
     # Battery never learns B — its transitions (charge/discharge/idle) are
     # deterministic.  Only the thermostat benefits from B-learning (outdoor
@@ -393,6 +406,7 @@ def run_tom_simulation(
         env_data, policy_len=policy_len, gamma=gamma,
         initial_soc=initial_soc, social_weight=social_weight,
         learn_B=False, auditory_mode=auditory_mode,
+        forecast_data=forecast_data,
     )
 
     result = SimulationResult(
@@ -552,7 +566,7 @@ def run_sophisticated_simulation(
 
         # 1. Thermostat observes and acts (standard)
         thermo_obs = env.get_thermostat_obs(step)
-        hvac_action, hvac_energy, thermo_info = thermo.step(thermo_obs)
+        hvac_action, hvac_energy, thermo_info = thermo.step(thermo_obs, step_idx=step)
 
         # 2. Apply thermostat action to environment
         actual_hvac_energy = env.apply_thermostat(hvac_action, step)
@@ -561,7 +575,9 @@ def run_sophisticated_simulation(
         battery_obs = env.get_battery_obs(step, actual_hvac_energy)
 
         # 4. Battery acts with sophisticated inference (passes step_idx)
-        battery_action, battery_info = battery.step(battery_obs, step_idx=step)
+        #    Pass current HVAC action so phantom prediction for tau=0 is exact
+        battery_action, battery_info = battery.step(
+            battery_obs, step_idx=step, current_hvac_action=hvac_action)
 
         # 5. Apply battery action and record
         record = env.apply_battery(battery_action, step, actual_hvac_energy)
@@ -672,6 +688,7 @@ def run_sophisticated_tom_simulation(
         battery_action, battery_info = battery.step(
             battery_obs, step_idx=step,
             received_q_comfort=q_comfort_shared,
+            current_hvac_action=hvac_action,
         )
 
         # 4. Store q(SoC) for thermostat at t+1
@@ -818,7 +835,7 @@ def run_full_sophisticated_simulation(
 
         # 4. Battery acts with sophisticated inference (phantom thermostat)
         battery_action, battery_info = battery.step(
-            battery_obs, step_idx=step)
+            battery_obs, step_idx=step, current_hvac_action=hvac_action)
 
         # 5. Apply battery action and record
         record = env.apply_battery(battery_action, step, actual_hvac_energy)
