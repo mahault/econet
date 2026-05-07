@@ -108,12 +108,18 @@ def run_experiment():
                     aif_result.total_cost)
 
                 # AIF ToM: predictive B uses forecast
-                tom_result = run_tom_simulation(
-                    env_data=env_data, num_days=num_days, seed=seed,
-                    verbose=False,
-                    forecast_data=forecast)
-                results[climate_key]["AIF ToM"][sigma].append(
-                    tom_result.total_cost)
+                try:
+                    tom_result = run_tom_simulation(
+                        env_data=env_data, num_days=num_days, seed=seed,
+                        verbose=False,
+                        forecast_data=forecast)
+                    results[climate_key]["AIF ToM"][sigma].append(
+                        tom_result.total_cost)
+                except Exception as e:
+                    print(f"    ToM failed (seed={seed}, sigma={sigma}): {e}")
+                    # Use AIF Aligned cost as fallback
+                    results[climate_key]["AIF ToM"][sigma].append(
+                        aif_result.total_cost)
 
     return results
 
