@@ -206,6 +206,7 @@ def run_hierarchical_simulation(
     initial_soc: float = 0.5,
     verbose: bool = True,
     seed: int = 42,
+    forecast_data: dict = None,
 ) -> SimulationResult:
     """Run hierarchical two-level EcoNet simulation.
 
@@ -253,9 +254,11 @@ def run_hierarchical_simulation(
 
     # Initialize low-level agents
     thermo = ThermostatAgent(env_data, policy_len=policy_len,
-                             gamma=gamma, learn_B=learn_B)
+                             gamma=gamma, learn_B=learn_B,
+                             forecast_data=forecast_data)
     battery = BatteryAgent(env_data, policy_len=policy_len,
-                           gamma=gamma, initial_soc=initial_soc)
+                           gamma=gamma, initial_soc=initial_soc,
+                           forecast_data=forecast_data)
 
     # Initialize high-level agent
     strategy = StrategyAgent(learn_B=learn_B)
@@ -497,6 +500,7 @@ def run_sophisticated_simulation(
     initial_soc: float = 0.5,
     verbose: bool = True,
     seed: int = 42,
+    forecast_data: dict = None,
 ) -> SimulationResult:
     """Run sophisticated inference simulation (Pitliya et al., 2025).
 
@@ -544,12 +548,14 @@ def run_sophisticated_simulation(
 
     # Standard aligned thermostat (with optional B-learning)
     thermo = ThermostatAgent(env_data, policy_len=policy_len,
-                             gamma=gamma, learn_B=learn_B, aligned=True)
+                             gamma=gamma, learn_B=learn_B, aligned=True,
+                             forecast_data=forecast_data)
 
     # Sophisticated battery: phantom thermostat inside
     battery = SophisticatedBatteryAgent(
         env_data, policy_len=policy_len, gamma=gamma,
         initial_soc=initial_soc,
+        forecast_data=forecast_data,
     )
 
     result = SimulationResult(
@@ -614,6 +620,7 @@ def run_sophisticated_tom_simulation(
     thermo_aligned: bool = True,
     verbose: bool = True,
     seed: int = 42,
+    forecast_data: dict = None,
 ) -> SimulationResult:
     """Run sophisticated inference + belief sharing simulation.
 
@@ -646,12 +653,14 @@ def run_sophisticated_tom_simulation(
         env_data, policy_len=policy_len, gamma=gamma,
         learn_B=learn_B, social_weight=social_weight,
         auditory_mode="full",
+        forecast_data=forecast_data,
     )
 
     # Sophisticated battery with belief sharing
     battery = SophisticatedToMBatteryAgent(
         env_data, policy_len=policy_len, gamma=gamma,
         initial_soc=initial_soc, social_weight=social_weight,
+        forecast_data=forecast_data,
     )
 
     result = SimulationResult(
@@ -735,6 +744,7 @@ def run_full_sophisticated_simulation(
     cost_weight: float = None,
     verbose: bool = True,
     seed: int = 42,
+    forecast_data: dict = None,
 ) -> SimulationResult:
     """Run symmetric sophisticated inference simulation.
 
@@ -795,12 +805,14 @@ def run_full_sophisticated_simulation(
         env_data, policy_len=policy_len, gamma=gamma,
         learn_B=learn_B, cost_scale=cost_scale,
         initial_soc=initial_soc,
+        forecast_data=forecast_data,
     )
 
     # Sophisticated battery: phantom thermostat for HVAC prediction
     battery = SophisticatedBatteryAgent(
         env_data, policy_len=policy_len, gamma=gamma,
         initial_soc=initial_soc,
+        forecast_data=forecast_data,
     )
 
     result = SimulationResult(

@@ -1,6 +1,6 @@
 """Multi-seed experiment runner for EcoNet.
 
-Runs 5 seeds x 7 conditions x 4 scenarios (synthetic climate).
+Runs 5 seeds x 9 conditions x 4 scenarios (synthetic climate).
 Outputs mean +/- std for cost, comfort, GHG per condition.
 """
 
@@ -12,7 +12,9 @@ import numpy as np
 import time
 
 from econet.climate import generate_climate_week
-from econet.simulation import run_simulation, run_tom_simulation
+from econet.simulation import (
+    run_simulation, run_tom_simulation, run_sophisticated_simulation,
+)
 from econet.baselines import run_no_hems, run_rule_based, run_oracle, run_mpc, run_rl
 from econet.metrics import compute_metrics
 
@@ -37,33 +39,49 @@ def run_condition(name, env_data, seed):
     elif name == "mpc":
         return run_mpc(env_data, horizon=6)
     elif name == "rl":
-        return run_rl(env_data, num_episodes=500, seed=seed)
+        return run_rl(env_data, num_episodes=2000, seed=seed)
+    elif name == "independent":
+        return run_simulation(
+            env_data=env_data, num_days=NUM_DAYS,
+            policy_len=4, gamma=16.0,
+            learn_B=False, aligned=False, seed=seed, verbose=False,
+        )
     elif name == "aligned":
         return run_simulation(
             env_data=env_data, num_days=NUM_DAYS,
             policy_len=4, gamma=16.0,
             learn_B=False, aligned=True, seed=seed, verbose=False,
         )
-    elif name == "tom_belief":
+    elif name == "federated":
         return run_tom_simulation(
             env_data=env_data, num_days=NUM_DAYS,
             policy_len=4, gamma=16.0,
             learn_B=False, social_weight=1.0, seed=seed, verbose=False,
         )
+    elif name == "tom":
+        return run_sophisticated_simulation(
+            env_data=env_data, num_days=NUM_DAYS,
+            policy_len=4, gamma=16.0,
+            learn_B=False, seed=seed, verbose=False,
+        )
     else:
         raise ValueError(f"Unknown condition: {name}")
 
 
-CONDITIONS = ["no_hems", "rule_based", "oracle", "mpc", "rl", "aligned", "tom_belief"]
+CONDITIONS = [
+    "no_hems", "rule_based", "oracle", "mpc", "rl",
+    "independent", "aligned", "federated", "tom",
+]
 
 
 def main():
     print("=" * 80)
     print("EcoNet Multi-Seed Experiment")
     print(f"  Seeds: {SEEDS}")
-    print(f"  Conditions: {CONDITIONS}")
+    print(f"  Conditions ({len(CONDITIONS)}): {CONDITIONS}")
     print(f"  Scenarios: {SCENARIOS}")
     print(f"  Duration: {NUM_DAYS} days each")
+    print(f"  Total runs: {len(SEEDS) * len(CONDITIONS) * len(SCENARIOS)}")
     print("=" * 80)
 
     # Results: scenario -> condition -> list of metrics
@@ -143,6 +161,49 @@ def main():
         print(f"  {cond:<14}: Cost=${np.mean(all_costs):.2f}+/-{np.std(all_costs):.2f}, "
               f"Comfort={np.mean(all_comforts):.1f}+/-{np.std(all_comforts):.1f}, "
               f"GHG={np.mean(all_ghgs):.2f}+/-{np.std(all_ghgs):.2f}")
+
+    # Oracle-gap table for LaTeX (Table 5 format)
+    DISPLAY_NAMES = {
+        "no_hems": "No-HEMS", "rule_based": "Rule-based", "oracle": "Oracle",
+        "mpc": "MPC", "rl": "RL", "independent": "Independent",
+        "aligned": "Aligned", "federated": "Federated", "tom": "ToM",
+    }
+    print("\n" + "=" * 100)
+    print("ORACLE GAP TABLE (for LaTeX Table 5)")
+    print("=" * 100)
+    print(f"{'Scenario':<20} {'Condition':<14} {'Cost':>8} {'Comfort':>10} "
+          f"{'GHG':>8} {'Batt%':>8} {'dCost':>8} {'dGHG':>8}")
+    print("-" * 100)
+
+    for city, season in SCENARIOS:
+        scenario_key = f"{city}_{season}"
+        # Get oracle mean cost/GHG for gap calculation
+        oracle_metrics = all_results[scenario_key].get("oracle", [])
+        oracle_cost = np.mean([m.total_cost for m in oracle_metrics]) if oracle_metrics else 0
+        oracle_ghg = np.mean([m.total_ghg for m in oracle_metrics]) if oracle_metrics else 0
+
+        for cond in CONDITIONS:
+            metrics_list = all_results[scenario_key][cond]
+            if not metrics_list:
+                continue
+            cost = np.mean([m.total_cost for m in metrics_list])
+            comfort = np.mean([m.comfort_deviation_total for m in metrics_list])
+            ghg = np.mean([m.total_ghg for m in metrics_list])
+            batt = np.mean([m.battery_utilization for m in metrics_list]) * 100
+
+            if cond == "oracle":
+                dc_str = "---"
+                dg_str = "---"
+            else:
+                dc = cost - oracle_cost
+                dg = ghg - oracle_ghg
+                dc_str = f"{dc:+.2f}"
+                dg_str = f"{dg:+.2f}"
+
+            name = DISPLAY_NAMES.get(cond, cond)
+            print(f"{scenario_key:<20} {name:<14} {cost:8.2f} {comfort:10.1f} "
+                  f"{ghg:8.2f} {batt:8.1f} {dc_str:>8} {dg_str:>8}")
+        print()
 
 
 if __name__ == "__main__":

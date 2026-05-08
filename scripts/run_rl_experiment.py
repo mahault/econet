@@ -22,7 +22,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from econet.climate import generate_climate_week, get_scenario_label, CLIMATE_PROFILES
-from econet.simulation import run_simulation
+from econet.simulation import (
+    run_simulation,
+    run_sophisticated_simulation,
+    run_full_sophisticated_simulation,
+)
 from econet.baselines import run_oracle, run_rl, run_rl_improved
 
 FIGURE_DIR = Path(__file__).parent.parent / "figures"
@@ -59,6 +63,8 @@ def run_convergence_experiment():
             "rl_original": {},
             "rl_improved": {},
             "aif_aligned": [],
+            "aif_sophisticated": [],
+            "aif_full_soph": [],
             "oracle": [],
         }
 
@@ -77,6 +83,30 @@ def run_convergence_experiment():
                 env_data=env_data, num_days=num_days, seed=seed,
                 aligned=True, verbose=False)
             results[climate_key]["aif_aligned"].append(aif_result.total_cost)
+
+            # AIF Sophisticated reference
+            print(f"  AIF Sophisticated (seed={seed})...")
+            try:
+                soph_result = run_sophisticated_simulation(
+                    env_data=env_data, num_days=num_days, seed=seed,
+                    verbose=False)
+                results[climate_key]["aif_sophisticated"].append(
+                    soph_result.total_cost)
+            except Exception as e:
+                print(f"    Sophisticated failed: {e}")
+                results[climate_key]["aif_sophisticated"].append(np.nan)
+
+            # AIF Full Sophisticated reference
+            print(f"  AIF Full Soph (seed={seed})...")
+            try:
+                full_result = run_full_sophisticated_simulation(
+                    env_data=env_data, num_days=num_days, seed=seed,
+                    verbose=False)
+                results[climate_key]["aif_full_soph"].append(
+                    full_result.total_cost)
+            except Exception as e:
+                print(f"    Full Soph failed: {e}")
+                results[climate_key]["aif_full_soph"].append(np.nan)
 
             # RL original (10 bins) at each episode count
             for n_ep in EPISODE_COUNTS:
@@ -241,10 +271,24 @@ def plot_convergence(results):
         ax.axhline(oracle_mean, color="black", linestyle="--",
                     linewidth=1.5, label=f"Oracle (${oracle_mean:.2f})")
 
-        # AIF reference line
+        # AIF Aligned reference line
         aif_mean = np.mean(data["aif_aligned"])
         ax.axhline(aif_mean, color="#2ecc71", linestyle="-.",
                     linewidth=1.5, label=f"AIF Aligned (${aif_mean:.2f})")
+
+        # AIF Sophisticated reference line
+        soph_vals = [v for v in data["aif_sophisticated"] if not np.isnan(v)]
+        if soph_vals:
+            soph_mean = np.mean(soph_vals)
+            ax.axhline(soph_mean, color="#9b59b6", linestyle=":",
+                        linewidth=1.5, label=f"AIF Soph (${soph_mean:.2f})")
+
+        # AIF Full Sophisticated reference line
+        full_vals = [v for v in data["aif_full_soph"] if not np.isnan(v)]
+        if full_vals:
+            full_mean = np.mean(full_vals)
+            ax.axhline(full_mean, color="#1abc9c", linestyle=":",
+                        linewidth=1.5, label=f"AIF Full Soph (${full_mean:.2f})")
 
         # RL original (10 bins)
         means_orig = [np.mean(data["rl_original"][n]) for n in EPISODE_COUNTS]
@@ -321,8 +365,20 @@ def main():
         best_rl = np.mean(data["rl_improved"][20000])
         aif_gap = (aif - oracle) / oracle * 100
         rl_gap = (best_rl - oracle) / oracle * 100
-        print(f"  {label}: Oracle=${oracle:.2f}, "
-              f"AIF={aif_gap:+.1f}%, RL-20k={rl_gap:+.1f}%")
+        summary = (f"  {label}: Oracle=${oracle:.2f}, "
+                   f"AIF Aligned={aif_gap:+.1f}%, RL-20k={rl_gap:+.1f}%")
+
+        soph_vals = [v for v in data["aif_sophisticated"] if not np.isnan(v)]
+        if soph_vals:
+            soph_gap = (np.mean(soph_vals) - oracle) / oracle * 100
+            summary += f", AIF Soph={soph_gap:+.1f}%"
+
+        full_vals = [v for v in data["aif_full_soph"] if not np.isnan(v)]
+        if full_vals:
+            full_gap = (np.mean(full_vals) - oracle) / oracle * 100
+            summary += f", AIF Full Soph={full_gap:+.1f}%"
+
+        print(summary)
 
     # Part 2: Cross-climate transfer
     transfer_results = run_transfer_experiment()

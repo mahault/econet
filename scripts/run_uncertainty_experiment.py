@@ -1,14 +1,16 @@
-"""Experiment A: Uncertainty Robustness (AIF vs MPC under forecast noise).
+"""Experiment A: All-Variants Uncertainty Robustness.
 
+Tests 8 methods (Oracle, MPC, 6 AIF variants) under forecast noise.
 Adds temperature forecast noise at sigma = {0, 1, 2, 3, 4} C.
 MPC and AIF plan against noisy forecasts; environment evolves with true values.
 Oracle retains perfect foresight.
 
-Output: fig19_uncertainty_robustness.pdf
+Output: fig19_uncertainty_robustness.pdf, fig19_uncertainty_absolute.pdf
 """
 
 import sys
 import time
+import traceback
 import numpy as np
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,7 +21,13 @@ import matplotlib.pyplot as plt
 
 from econet.environment import generate_forecasts
 from econet.climate import generate_climate_week, get_scenario_label
-from econet.simulation import run_simulation, run_tom_simulation
+from econet.simulation import (
+    run_simulation,
+    run_tom_simulation,
+    run_sophisticated_simulation,
+    run_sophisticated_tom_simulation,
+    run_full_sophisticated_simulation,
+)
 from econet.baselines import run_oracle, run_mpc
 
 FIGURE_DIR = Path(__file__).parent.parent / "figures"
@@ -35,14 +43,69 @@ plt.rcParams.update({
 })
 
 SEEDS = [42, 137, 256]
-CLIMATES = ["london_summer", "london_winter", "montreal_winter", "phoenix_summer"]
+CLIMATES = ["london_summer", "phoenix_summer"]
 TEMP_NOISE_SIGMAS = [0, 1, 2, 3, 4]  # C
+
+# All 8 methods to test
+METHOD_NAMES = [
+    "Oracle",
+    "MPC",
+    "AIF Independent",
+    "AIF Aligned",
+    "AIF Federated",
+    "AIF Sophisticated",
+    "AIF Soph+ToM",
+    "AIF Full Soph",
+]
+
+
+def _run_method(method_name, env_data, forecast, seed, num_days):
+    """Run a single method with error handling."""
+    total_steps = len(env_data["time_of_day"])
+
+    if method_name == "Oracle":
+        result = run_oracle(env_data, max_steps=total_steps)
+    elif method_name == "MPC":
+        result = run_mpc(env_data, horizon=6, forecast_data=forecast)
+    elif method_name == "AIF Independent":
+        result = run_simulation(
+            env_data=env_data, num_days=num_days, seed=seed,
+            aligned=False, verbose=False, forecast_data=forecast)
+    elif method_name == "AIF Aligned":
+        result = run_simulation(
+            env_data=env_data, num_days=num_days, seed=seed,
+            aligned=True, verbose=False, forecast_data=forecast)
+    elif method_name == "AIF Federated":
+        result = run_tom_simulation(
+            env_data=env_data, num_days=num_days, seed=seed,
+            verbose=False, forecast_data=forecast)
+    elif method_name == "AIF Sophisticated":
+        result = run_sophisticated_simulation(
+            env_data=env_data, num_days=num_days, seed=seed,
+            verbose=False, forecast_data=forecast)
+    elif method_name == "AIF Soph+ToM":
+        result = run_sophisticated_tom_simulation(
+            env_data=env_data, num_days=num_days, seed=seed,
+            verbose=False, forecast_data=forecast)
+    elif method_name == "AIF Full Soph":
+        result = run_full_sophisticated_simulation(
+            env_data=env_data, num_days=num_days, seed=seed,
+            verbose=False, forecast_data=forecast)
+    else:
+        raise ValueError(f"Unknown method: {method_name}")
+
+    return result.total_cost
 
 
 def run_experiment():
-    """Run uncertainty robustness experiment."""
+    """Run uncertainty robustness experiment with all 8 methods."""
     print("=" * 60)
-    print("Experiment A: Uncertainty Robustness")
+    print("Experiment A: All-Variants Uncertainty Robustness")
+    print(f"  Methods: {len(METHOD_NAMES)}")
+    print(f"  Climates: {CLIMATES}")
+    print(f"  Noise levels: {TEMP_NOISE_SIGMAS}")
+    print(f"  Seeds: {SEEDS}")
+    print(f"  Total runs: {len(METHOD_NAMES) * len(TEMP_NOISE_SIGMAS) * len(CLIMATES) * len(SEEDS)}")
     print("=" * 60)
 
     # results[climate][method][sigma] = list of costs across seeds
@@ -56,23 +119,17 @@ def run_experiment():
         print(f"{'='*50}")
 
         results[climate_key] = {
-            "Oracle": {s: [] for s in TEMP_NOISE_SIGMAS},
-            "MPC": {s: [] for s in TEMP_NOISE_SIGMAS},
-            "AIF Aligned": {s: [] for s in TEMP_NOISE_SIGMAS},
-            "AIF ToM": {s: [] for s in TEMP_NOISE_SIGMAS},
+            m: {s: [] for s in TEMP_NOISE_SIGMAS}
+            for m in METHOD_NAMES
         }
 
         for seed in SEEDS:
             env_data = generate_climate_week(city, season, seed=seed)
             num_days = 7
-            total_steps = len(env_data["time_of_day"])
 
             for sigma in TEMP_NOISE_SIGMAS:
                 # Proportional solar noise: sigma=4 C -> 40% solar noise
                 solar_noise = sigma * 0.10
-
-                print(f"  seed={seed}, sigma={sigma}C "
-                      f"(solar_noise={solar_noise:.0%})...")
 
                 # Generate noisy forecast
                 forecast_seed = seed * 1000 + sigma
@@ -86,75 +143,84 @@ def run_experiment():
                         seed=forecast_seed,
                     )
 
-                # Oracle: always uses true data (perfect foresight)
-                oracle_result = run_oracle(
-                    env_data, max_steps=total_steps)
-                results[climate_key]["Oracle"][sigma].append(
-                    oracle_result.total_cost)
-
-                # MPC: plans against forecast, executes against real env
-                mpc_result = run_mpc(
-                    env_data, horizon=6,
-                    forecast_data=forecast)
-                results[climate_key]["MPC"][sigma].append(
-                    mpc_result.total_cost)
-
-                # AIF Aligned: predictive B uses forecast
-                aif_result = run_simulation(
-                    env_data=env_data, num_days=num_days, seed=seed,
-                    aligned=True, verbose=False,
-                    forecast_data=forecast)
-                results[climate_key]["AIF Aligned"][sigma].append(
-                    aif_result.total_cost)
-
-                # AIF ToM: predictive B uses forecast
-                try:
-                    tom_result = run_tom_simulation(
-                        env_data=env_data, num_days=num_days, seed=seed,
-                        verbose=False,
-                        forecast_data=forecast)
-                    results[climate_key]["AIF ToM"][sigma].append(
-                        tom_result.total_cost)
-                except Exception as e:
-                    print(f"    ToM failed (seed={seed}, sigma={sigma}): {e}")
-                    # Use AIF Aligned cost as fallback
-                    results[climate_key]["AIF ToM"][sigma].append(
-                        aif_result.total_cost)
+                for method in METHOD_NAMES:
+                    print(f"  {method} | seed={seed}, sigma={sigma}C...",
+                          end=" ", flush=True)
+                    try:
+                        cost = _run_method(
+                            method, env_data, forecast, seed, num_days)
+                        results[climate_key][method][sigma].append(cost)
+                        print(f"${cost:.2f}")
+                    except Exception as e:
+                        print(f"FAILED: {e}")
+                        traceback.print_exc()
+                        # Use NaN as fallback — will be filtered in plotting
+                        results[climate_key][method][sigma].append(np.nan)
 
     return results
 
 
 def plot_results(results):
-    """Generate fig19_uncertainty_robustness.pdf."""
+    """Generate fig19_uncertainty_robustness.pdf (percentage cost increase)."""
     n_climates = len(CLIMATES)
-    fig, axes = plt.subplots(2, 2, figsize=(12, 9))
-    axes = axes.flatten()
+    fig, axes = plt.subplots(1, n_climates, figsize=(6 * n_climates, 5),
+                             sharey=False)
+    if n_climates == 1:
+        axes = [axes]
 
     method_colors = {
         "Oracle": "black",
         "MPC": "#e74c3c",
+        "AIF Independent": "#95a5a6",
         "AIF Aligned": "#2ecc71",
-        "AIF ToM": "#3498db",
+        "AIF Federated": "#3498db",
+        "AIF Sophisticated": "#9b59b6",
+        "AIF Soph+ToM": "#e67e22",
+        "AIF Full Soph": "#1abc9c",
     }
     method_markers = {
         "Oracle": "D",
         "MPC": "o",
+        "AIF Independent": "v",
         "AIF Aligned": "s",
-        "AIF ToM": "^",
+        "AIF Federated": "^",
+        "AIF Sophisticated": "P",
+        "AIF Soph+ToM": "*",
+        "AIF Full Soph": "X",
+    }
+    method_linestyles = {
+        "Oracle": "--",
+        "MPC": "-",
+        "AIF Independent": "-",
+        "AIF Aligned": "-",
+        "AIF Federated": "-",
+        "AIF Sophisticated": "-",
+        "AIF Soph+ToM": "-",
+        "AIF Full Soph": "-",
     }
 
     for ax, climate_key in zip(axes, CLIMATES):
         label = get_scenario_label(climate_key)
         data = results[climate_key]
 
-        for method in ["Oracle", "MPC", "AIF Aligned", "AIF ToM"]:
-            means = [np.mean(data[method][s]) for s in TEMP_NOISE_SIGMAS]
-            stds = [np.std(data[method][s]) for s in TEMP_NOISE_SIGMAS]
+        for method in METHOD_NAMES:
+            costs_by_sigma = []
+            stds_by_sigma = []
+            for s in TEMP_NOISE_SIGMAS:
+                vals = [v for v in data[method][s] if not np.isnan(v)]
+                if vals:
+                    costs_by_sigma.append(np.mean(vals))
+                    stds_by_sigma.append(np.std(vals))
+                else:
+                    costs_by_sigma.append(np.nan)
+                    stds_by_sigma.append(0)
 
             # Normalize to percentage increase from sigma=0
-            base = means[0]
-            pct_increase = [(m - base) / base * 100 for m in means]
-            pct_std = [s / base * 100 for s in stds]
+            base = costs_by_sigma[0]
+            if np.isnan(base) or base == 0:
+                continue
+            pct_increase = [(m - base) / base * 100 for m in costs_by_sigma]
+            pct_std = [s / base * 100 for s in stds_by_sigma]
 
             ax.errorbar(
                 TEMP_NOISE_SIGMAS, pct_increase, yerr=pct_std,
@@ -162,36 +228,47 @@ def plot_results(results):
                 marker=method_markers[method],
                 markersize=6, capsize=3, linewidth=1.5,
                 label=method,
-                linestyle="--" if method == "Oracle" else "-",
+                linestyle=method_linestyles[method],
             )
 
         ax.set_xlabel("Forecast Noise $\\sigma$ ($\\degree$C)")
         ax.set_ylabel("Cost Increase (%)")
         ax.set_title(label)
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=7, ncol=2)
         ax.grid(True, alpha=0.3)
         ax.axhline(0, color="gray", linewidth=0.5, linestyle=":")
 
-    fig.suptitle("Robustness Under Forecast Uncertainty", fontsize=14, y=1.01)
+    fig.suptitle("Robustness Under Forecast Uncertainty (All AIF Variants)",
+                 fontsize=14, y=1.01)
     fig.tight_layout()
 
     out_path = FIGURE_DIR / "fig19_uncertainty_robustness.pdf"
     fig.savefig(out_path, bbox_inches="tight")
     fig.savefig(out_path.with_suffix(".png"), bbox_inches="tight")
     plt.close(fig)
-    print(f"\nFig 19 saved: {out_path}")
+    print(f"\nFig 19a (percentage) saved: {out_path}")
 
     # Also plot absolute costs
-    fig2, axes2 = plt.subplots(2, 2, figsize=(12, 9))
-    axes2 = axes2.flatten()
+    fig2, axes2 = plt.subplots(1, n_climates, figsize=(6 * n_climates, 5),
+                               sharey=False)
+    if n_climates == 1:
+        axes2 = [axes2]
 
     for ax, climate_key in zip(axes2, CLIMATES):
         label = get_scenario_label(climate_key)
         data = results[climate_key]
 
-        for method in ["Oracle", "MPC", "AIF Aligned", "AIF ToM"]:
-            means = [np.mean(data[method][s]) for s in TEMP_NOISE_SIGMAS]
-            stds = [np.std(data[method][s]) for s in TEMP_NOISE_SIGMAS]
+        for method in METHOD_NAMES:
+            means = []
+            stds = []
+            for s in TEMP_NOISE_SIGMAS:
+                vals = [v for v in data[method][s] if not np.isnan(v)]
+                if vals:
+                    means.append(np.mean(vals))
+                    stds.append(np.std(vals))
+                else:
+                    means.append(np.nan)
+                    stds.append(0)
 
             ax.errorbar(
                 TEMP_NOISE_SIGMAS, means, yerr=stds,
@@ -199,46 +276,56 @@ def plot_results(results):
                 marker=method_markers[method],
                 markersize=6, capsize=3, linewidth=1.5,
                 label=method,
-                linestyle="--" if method == "Oracle" else "-",
+                linestyle=method_linestyles[method],
             )
 
         ax.set_xlabel("Forecast Noise $\\sigma$ ($\\degree$C)")
         ax.set_ylabel("Total Cost ($)")
         ax.set_title(label)
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=7, ncol=2)
         ax.grid(True, alpha=0.3)
 
-    fig2.suptitle("Absolute Cost Under Forecast Uncertainty", fontsize=14, y=1.01)
+    fig2.suptitle("Absolute Cost Under Forecast Uncertainty (All AIF Variants)",
+                  fontsize=14, y=1.01)
     fig2.tight_layout()
 
     out_path2 = FIGURE_DIR / "fig19_uncertainty_absolute.pdf"
     fig2.savefig(out_path2, bbox_inches="tight")
     fig2.savefig(out_path2.with_suffix(".png"), bbox_inches="tight")
     plt.close(fig2)
-    print(f"  Absolute cost plot saved: {out_path2}")
+    print(f"Fig 19b (absolute) saved: {out_path2}")
 
 
 def print_summary(results):
     """Print summary table of results."""
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 90)
     print("Uncertainty Robustness Summary")
-    print("=" * 70)
+    print("=" * 90)
 
     for climate_key in CLIMATES:
         label = get_scenario_label(climate_key)
         data = results[climate_key]
         print(f"\n--- {label} ---")
-        print(f"{'Method':<15} {'sigma=0':>10} {'sigma=2':>10} {'sigma=4':>10} "
+        print(f"{'Method':<22} {'sigma=0':>10} {'sigma=2':>10} {'sigma=4':>10} "
               f"{'Increase':>10}")
-        print("-" * 58)
+        print("-" * 65)
 
-        for method in ["Oracle", "MPC", "AIF Aligned", "AIF ToM"]:
-            c0 = np.mean(data[method][0])
-            c2 = np.mean(data[method][2])
-            c4 = np.mean(data[method][4])
-            increase = (c4 - c0) / c0 * 100 if c0 > 0 else 0
-            print(f"{method:<15} ${c0:>8.2f} ${c2:>8.2f} ${c4:>8.2f} "
-                  f"{increase:>+8.1f}%")
+        for method in METHOD_NAMES:
+            vals0 = [v for v in data[method][0] if not np.isnan(v)]
+            vals2 = [v for v in data[method][2] if not np.isnan(v)]
+            vals4 = [v for v in data[method][4] if not np.isnan(v)]
+
+            c0 = np.mean(vals0) if vals0 else np.nan
+            c2 = np.mean(vals2) if vals2 else np.nan
+            c4 = np.mean(vals4) if vals4 else np.nan
+            increase = (c4 - c0) / c0 * 100 if (vals0 and vals4 and c0 > 0) else np.nan
+
+            c0_s = f"${c0:.2f}" if not np.isnan(c0) else "N/A"
+            c2_s = f"${c2:.2f}" if not np.isnan(c2) else "N/A"
+            c4_s = f"${c4:.2f}" if not np.isnan(c4) else "N/A"
+            inc_s = f"{increase:+.1f}%" if not np.isnan(increase) else "N/A"
+
+            print(f"{method:<22} {c0_s:>10} {c2_s:>10} {c4_s:>10} {inc_s:>10}")
 
 
 def main():

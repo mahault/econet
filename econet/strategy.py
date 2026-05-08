@@ -18,6 +18,7 @@ import jax.tree_util as jtu
 import equinox as eqx
 
 from pymdp.agent import Agent
+from .agents import _update_empirical_prior_compat, _infer_parameters_compat
 
 from .environment import (
     TARGET_TEMP_OCCUPIED, TEMP_LEVELS, TEMP_MIN,
@@ -465,7 +466,8 @@ class StrategyAgent:
                 lambda prev, curr: jnp.concatenate([prev, curr], axis=1),
                 self._qs_prev, qs
             )
-            self.agent = self.agent.infer_parameters(
+            self.agent = _infer_parameters_compat(
+                self.agent,
                 beliefs_A=beliefs_seq,
                 outcomes=obs,
                 actions=self._action_prev,
@@ -477,8 +479,7 @@ class StrategyAgent:
             self._qs_prev = qs
             self._action_prev = action
 
-        pred, _ = self.agent.update_empirical_prior(action, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action, qs)
 
         q_pi_np = np.asarray(q_pi)
         neg_efe_np = np.asarray(neg_efe)

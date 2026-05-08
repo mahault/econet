@@ -27,6 +27,28 @@ from .environment import (
 
 
 # ======================================================================
+# pymdp API compatibility helpers
+# ======================================================================
+
+def _update_empirical_prior_compat(agent, action, qs):
+    """Handle both pymdp API versions for update_empirical_prior."""
+    result = agent.update_empirical_prior(action, qs)
+    if isinstance(result, tuple):
+        return result[0]  # (pred, qs) format
+    return result  # single value format
+
+
+def _infer_parameters_compat(agent, **kwargs):
+    """Handle both pymdp API versions for infer_parameters."""
+    try:
+        return agent.infer_parameters(**kwargs)
+    except TypeError:
+        if 'outcomes' in kwargs:
+            kwargs['observations'] = kwargs.pop('outcomes')
+        return agent.infer_parameters(**kwargs)
+
+
+# ======================================================================
 # Predictive B matrix helpers (shared by standard + ToM agents)
 # ======================================================================
 
@@ -212,7 +234,8 @@ class ThermostatAgent:
                 lambda prev, curr: jnp.concatenate([prev, curr], axis=1),
                 self._qs_prev, qs
             )
-            self.agent = self.agent.infer_parameters(
+            self.agent = _infer_parameters_compat(
+                self.agent,
                 beliefs_A=beliefs_seq,
                 outcomes=obs,
                 actions=self._action_prev,
@@ -226,8 +249,7 @@ class ThermostatAgent:
             self._action_prev = action
 
         # Update empirical prior for next step
-        pred, _ = self.agent.update_empirical_prior(action, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action, qs)
 
         # Convert JAX arrays to numpy for storage
         q_pi_np = np.asarray(q_pi)
@@ -364,8 +386,7 @@ class BatteryAgent:
         action_int = int(action[0, 0])
 
         # Update empirical prior for next step
-        pred, _ = self.agent.update_empirical_prior(action, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action, qs)
 
         # Convert JAX arrays to numpy for storage
         q_pi_np = np.asarray(q_pi)
@@ -418,7 +439,8 @@ class SophisticatedThermostatAgent:
 
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, learn_B: bool = False,
-                 cost_scale: float = 3.0, initial_soc: float = 0.5):
+                 cost_scale: float = 3.0, initial_soc: float = 0.5,
+                 forecast_data: dict = None):
         from itertools import product
         from .phantom import PhantomBattery
 
@@ -471,6 +493,7 @@ class SophisticatedThermostatAgent:
         self._qs_prev = None
         self._action_prev = None
         self._env_data = env_data
+        self._forecast_data = forecast_data if forecast_data is not None else env_data
 
         # Phantom battery for B[4] construction
         self.phantom_battery = PhantomBattery(
@@ -496,23 +519,23 @@ class SophisticatedThermostatAgent:
         B1, B2, B3 : tuple of np.ndarray
             Transition matrices for outdoor_temp, occupancy, tou_high.
         """
-        total = len(self._env_data["outdoor_temp"])
+        total = len(self._forecast_data["outdoor_temp"])
         next_idx = min(step_idx + 1, total - 1)
 
         # --- B[3]: TOU (deterministic schedule, published by grid) ---
-        next_tou = int(self._env_data["tou_high"][next_idx])
+        next_tou = int(self._forecast_data["tou_high"][next_idx])
         B3 = np.zeros((2, 2, 1))
         B3[next_tou, 0, 0] = 1.0
         B3[next_tou, 1, 0] = 1.0
 
         # --- B[2]: Occupancy (deterministic calendar) ---
-        next_occ = int(self._env_data["occupancy"][next_idx])
+        next_occ = int(self._forecast_data["occupancy"][next_idx])
         B2 = np.zeros((2, 2, 1))
         B2[next_occ, 0, 0] = 1.0
         B2[next_occ, 1, 0] = 1.0
 
         # --- B[1]: Outdoor temp (Gaussian around forecast, σ=1.0 bins) ---
-        next_temp_cont = self._env_data["outdoor_temp"][next_idx]
+        next_temp_cont = self._forecast_data["outdoor_temp"][next_idx]
         next_temp_idx = discretize_temp(next_temp_cont)
         B1 = np.zeros((TEMP_LEVELS, TEMP_LEVELS, 1))
         for prev in range(TEMP_LEVELS):
@@ -646,7 +669,8 @@ class SophisticatedThermostatAgent:
                 lambda prev, curr: jnp.concatenate([prev, curr], axis=1),
                 self._qs_prev, qs
             )
-            self.agent = self.agent.infer_parameters(
+            self.agent = _infer_parameters_compat(
+                self.agent,
                 beliefs_A=beliefs_seq,
                 outcomes=obs,
                 actions=self._action_prev,
@@ -660,8 +684,7 @@ class SophisticatedThermostatAgent:
             self._action_prev = action
 
         # --- Update empirical prior ---
-        pred, _ = self.agent.update_empirical_prior(action, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action, qs)
 
         q_pi_np = np.asarray(q_pi)
         neg_efe_np = np.asarray(neg_efe)
@@ -698,7 +721,8 @@ class SophisticatedBatteryAgent:
     C_SOC_OFFPEAK = np.array([-1.5, -0.5, 0.0, 0.5, 1.0])
 
     def __init__(self, env_data: dict, policy_len: int = 4,
-                 gamma: float = 16.0, initial_soc: float = 0.5):
+                 gamma: float = 16.0, initial_soc: float = 0.5,
+                 forecast_data: dict = None):
         from .phantom import PhantomThermostat
         from .sophisticated import compute_sophisticated_efe
 
@@ -729,8 +753,9 @@ class SophisticatedBatteryAgent:
         self.qs_history = []
         self.efe_history = []
         self._env_data = env_data
+        self._forecast_data = forecast_data if forecast_data is not None else env_data
 
-        # Phantom thermostat for sophisticated inference
+        # Phantom thermostat for sophisticated inference (uses true env_data)
         self.phantom = PhantomThermostat(env_data, policy_len=policy_len,
                                          gamma=gamma)
 
@@ -764,17 +789,17 @@ class SophisticatedBatteryAgent:
         from .sophisticated import compute_sophisticated_efe
 
         # --- Predictive TOU B matrix (matches standard BatteryAgent) ---
-        B1_new = _build_battery_predictive_tou(self._env_data, step_idx)
+        B1_new = _build_battery_predictive_tou(self._forecast_data, step_idx)
         new_B = list(self.agent.B)
         new_B[1] = jnp.array(B1_new)[None, :]
         self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
 
         # --- Build per-step TOU schedule for custom EFE ---
-        total = len(self._env_data["tou_high"])
+        total = len(self._forecast_data["tou_high"])
         tou_schedule = []
         for tau in range(self.policy_len):
             future_idx = min(step_idx + tau + 1, total - 1)
-            tou_schedule.append(int(self._env_data["tou_high"][future_idx]))
+            tou_schedule.append(int(self._forecast_data["tou_high"][future_idx]))
 
         # --- Dynamic C (TOU arbitrage) ---
         tou_high = obs_dict.get("tou_high", 0)
@@ -832,8 +857,7 @@ class SophisticatedBatteryAgent:
         # --- Update empirical prior for next step ---
         # Build action array matching pymdp format: (batch=1, n_factors)
         action_arr = jnp.array([[action_int, 0, 0]])
-        pred, _ = self.agent.update_empirical_prior(action_arr, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action_arr, qs)
 
         self.qs_history.append(qs)
         self.efe_history.append(neg_efe)
@@ -863,7 +887,8 @@ class SophisticatedToMBatteryAgent:
 
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, initial_soc: float = 0.5,
-                 social_weight: float = 1.0):
+                 social_weight: float = 1.0,
+                 forecast_data: dict = None):
         from .phantom import PhantomThermostat
         from .tom import ThermostatToM
 
@@ -894,8 +919,9 @@ class SophisticatedToMBatteryAgent:
         self.qs_history = []
         self.efe_history = []
         self._env_data = env_data
+        self._forecast_data = forecast_data if forecast_data is not None else env_data
 
-        # Phantom thermostat for sophisticated inference
+        # Phantom thermostat for sophisticated inference (uses true env_data)
         self.phantom = PhantomThermostat(env_data, policy_len=policy_len,
                                          gamma=gamma)
         self._hvac_delta_bins = round(HVAC_KWH_PER_STEP / 1.0)
@@ -957,17 +983,17 @@ class SophisticatedToMBatteryAgent:
                 received_q_comfort)
 
         # --- Predictive TOU B matrix ---
-        B1_new = _build_battery_predictive_tou(self._env_data, step_idx)
+        B1_new = _build_battery_predictive_tou(self._forecast_data, step_idx)
         new_B = list(self.agent.B)
         new_B[1] = jnp.array(B1_new)[None, :]
         self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
 
         # --- Build per-step TOU schedule for custom EFE ---
-        total = len(self._env_data["tou_high"])
+        total = len(self._forecast_data["tou_high"])
         tou_schedule = []
         for tau in range(self.policy_len):
             future_idx = min(step_idx + tau + 1, total - 1)
-            tou_schedule.append(int(self._env_data["tou_high"][future_idx]))
+            tou_schedule.append(int(self._forecast_data["tou_high"][future_idx]))
 
         # --- Dynamic C (TOU arbitrage) ---
         tou_high = obs_dict.get("tou_high", 0)
@@ -1038,8 +1064,7 @@ class SophisticatedToMBatteryAgent:
 
         # --- Update empirical prior ---
         action_arr = jnp.array([[action_int, 0, 0]])
-        pred, _ = self.agent.update_empirical_prior(action_arr, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action_arr, qs)
 
         self.qs_history.append(qs)
         self.efe_history.append(neg_efe)
@@ -1251,7 +1276,8 @@ class ToMThermostatAgent:
                 lambda prev, curr: jnp.concatenate([prev, curr], axis=1),
                 self._qs_prev, qs
             )
-            self.agent = self.agent.infer_parameters(
+            self.agent = _infer_parameters_compat(
+                self.agent,
                 beliefs_A=qs, outcomes=obs,
                 actions=self._action_prev, beliefs_B=beliefs_seq, lr_pB=1.0,
             )
@@ -1259,8 +1285,7 @@ class ToMThermostatAgent:
         self._qs_prev = qs
         self._action_prev = action
 
-        pred, _ = self.agent.update_empirical_prior(action, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action, qs)
 
         q_pi_np = np.asarray(q_pi)
         neg_efe_np = np.asarray(neg_efe)
@@ -1473,7 +1498,8 @@ class ToMBatteryAgent:
                 lambda prev, curr: jnp.concatenate([prev, curr], axis=1),
                 self._qs_prev, qs
             )
-            self.agent = self.agent.infer_parameters(
+            self.agent = _infer_parameters_compat(
+                self.agent,
                 beliefs_A=qs, outcomes=obs,
                 actions=self._action_prev, beliefs_B=beliefs_seq, lr_pB=1.0,
             )
@@ -1481,8 +1507,7 @@ class ToMBatteryAgent:
         self._qs_prev = qs
         self._action_prev = action
 
-        pred, _ = self.agent.update_empirical_prior(action, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action, qs)
 
         q_pi_np = np.asarray(q_pi)
         neg_efe_np = np.asarray(neg_efe)

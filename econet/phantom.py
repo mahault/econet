@@ -17,6 +17,14 @@ import jax.random as jr
 
 from pymdp.agent import Agent
 
+
+def _update_empirical_prior_compat(agent, action, qs):
+    """Handle both pymdp API versions for update_empirical_prior."""
+    result = agent.update_empirical_prior(action, qs)
+    if isinstance(result, tuple):
+        return result[0]
+    return result
+
 from .generative_model import (
     build_thermostat_model,
     build_battery_model,
@@ -194,8 +202,7 @@ class PhantomThermostat:
         action = self.agent.sample_action(q_pi)
 
         # Update empirical prior for next step
-        pred = self.agent.update_empirical_prior(action, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action, qs)
         self._qs_prev = qs
         self._action_prev = action
 
@@ -362,8 +369,7 @@ class PhantomBattery:
         # Select action for empirical prior update
         self._rng_key, _ = jr.split(self._rng_key)
         action = self.agent.sample_action(q_pi)
-        pred = self.agent.update_empirical_prior(action, qs)
-        self._empirical_prior = pred
+        self._empirical_prior = _update_empirical_prior_compat(self.agent, action, qs)
 
         # Track estimated SoC for next step
         action_int = int(action[0, 0])

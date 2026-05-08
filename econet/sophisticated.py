@@ -162,12 +162,16 @@ def compute_sophisticated_efe(
     energy_factor_idx=2,
     hvac_delta_bins=2,
     gamma=16.0,
+    tou_schedule=None,
 ):
-    """Compute EFE for battery policies with step-dependent B[energy].
+    """Compute EFE for battery policies with step-dependent B[energy] and TOU.
 
     At each planning step tau, B[energy_factor_idx] is replaced with
     B_effective_tau computed from phantom_sequence[tau] (predicted
-    thermostat HVAC probability).
+    thermostat HVAC probability).  When tou_schedule is provided,
+    B[1] (TOU transitions) is also replaced per-step with deterministic
+    schedule knowledge, giving the sophisticated agent full horizon
+    awareness of both HVAC activity AND tariff changes.
 
     Parameters
     ----------
@@ -191,6 +195,11 @@ def compute_sophisticated_efe(
         Energy bins shifted by HVAC activity (default 2).
     gamma : float
         Policy precision (inverse temperature).
+    tou_schedule : list of int, optional
+        Per-step TOU state [tou_0, ..., tou_{T-1}] for the planning horizon.
+        Each entry is 0 (off-peak) or 1 (peak).  When provided, B[1] is
+        replaced at each tau with a deterministic transition to the known
+        TOU state, enabling full-horizon tariff awareness.
 
     Returns
     -------
@@ -211,6 +220,17 @@ def compute_sophisticated_efe(
     n_policies = policies_np.shape[0]
     policy_len = policies_np.shape[1]
     G = np.zeros(n_policies)
+
+    # Pre-build per-step TOU transition matrices if schedule provided
+    tou_B1_per_step = None
+    if tou_schedule is not None:
+        tou_B1_per_step = []
+        for tau in range(policy_len):
+            t_idx = min(tau, len(tou_schedule) - 1)
+            next_tou = tou_schedule[t_idx]
+            B1_tau = np.zeros((2, 2))
+            B1_tau[next_tou, :] = 1.0  # deterministic: next TOU is known
+            tou_B1_per_step.append(B1_tau)
 
     for pi_idx in range(n_policies):
         policy = policies_np[pi_idx]  # shape (T, n_factors)
@@ -235,9 +255,12 @@ def compute_sophisticated_efe(
             B0 = B_np[0]  # shape (5, 5, 3)
             qs_local[0] = B0[:, :, a_f] @ qs_local[0]
 
-            # Factor 1 (TOU): exogenous, identity
-            B1 = B_np[1]  # shape (2, 2, 1)
-            qs_local[1] = B1[:, :, 0] @ qs_local[1]
+            # Factor 1 (TOU): per-step schedule or static
+            if tou_B1_per_step is not None:
+                qs_local[1] = tou_B1_per_step[tau] @ qs_local[1]
+            else:
+                B1 = B_np[1]  # shape (2, 2, 1)
+                qs_local[1] = B1[:, :, 0] @ qs_local[1]
 
             # Factor 2 (energy): SI-modified transition
             qs_local[2] = B2_eff @ qs_local[2]
@@ -256,13 +279,20 @@ def compute_sophisticated_efe(
                 np.dot(qo[m], C_np[m]) for m in range(len(A_np))
             )
 
-            # Ambiguity: E_qs[H[P(o|s)]]
+            # Information gain = H[q(o|pi)] - E_qs[H[P(o|s)]]
+            # H[q(o|pi)]: entropy of predicted observations
+            H_qo = 0.0
+            for m in range(len(A_np)):
+                qo_m = qo[m]
+                H_qo -= np.sum(qo_m * np.log(qo_m + 1e-16))
+
+            # E_qs[H[P(o|s)]]: expected ambiguity under state beliefs
             ambiguity = _compute_ambiguity(A_np, qs_local, A_deps)
 
-            # G accumulates utility - ambiguity (EFE convention: lower = better)
-            # For policy selection, we want neg_G = utility - ambiguity
-            # (higher utility = more preferred, lower ambiguity = clearer predictions)
-            G[pi_idx] += utility - ambiguity
+            info_gain = H_qo - ambiguity
+
+            # neg_G = utility + info_gain (matches pymdp EFE decomposition)
+            G[pi_idx] += utility + info_gain
 
     # G is now "neg EFE" (higher = better policy)
     q_pi = _softmax(gamma * G)
