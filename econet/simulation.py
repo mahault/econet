@@ -76,14 +76,17 @@ class SimulationResult:
 def run_simulation(env_data: Optional[dict] = None,
                    num_days: int = 2,
                    policy_len: int = 4,
-                   gamma: float = 16.0,
+                   gamma: float = 64.0,
                    learn_B: bool = False,
                    aligned: bool = True,
                    initial_room_temp: float = 20.0,
                    initial_soc: float = 0.5,
                    verbose: bool = True,
                    seed: int = 42,
-                   forecast_data: dict = None) -> SimulationResult:
+                   forecast_data: dict = None,
+                   use_states_info_gain: bool = True,
+                   comfort_scale: float = 1.0,
+                   soc_scale: float = 1.0) -> SimulationResult:
     """Run multi-agent EcoNet simulation.
 
     Parameters
@@ -135,10 +138,14 @@ def run_simulation(env_data: Optional[dict] = None,
     # Initialize agents
     thermo = ThermostatAgent(env_data, policy_len=policy_len,
                              gamma=gamma, learn_B=learn_B, aligned=aligned,
-                             forecast_data=forecast_data)
+                             forecast_data=forecast_data,
+                             use_states_info_gain=use_states_info_gain,
+                             comfort_scale=comfort_scale, soc_scale=soc_scale)
     battery = BatteryAgent(env_data, policy_len=policy_len,
                            gamma=gamma, initial_soc=initial_soc, aligned=aligned,
-                           forecast_data=forecast_data)
+                           forecast_data=forecast_data,
+                           use_states_info_gain=use_states_info_gain,
+                           soc_scale=soc_scale)
 
     result = SimulationResult(
         num_days=num_days, policy_len=policy_len, learn_B=learn_B,
@@ -200,13 +207,16 @@ def run_hierarchical_simulation(
     env_data: Optional[dict] = None,
     num_days: int = 7,
     policy_len: int = 4,
-    gamma: float = 16.0,
+    gamma: float = 64.0,
     learn_B: bool = True,
     initial_room_temp: float = 20.0,
     initial_soc: float = 0.5,
     verbose: bool = True,
     seed: int = 42,
     forecast_data: dict = None,
+    use_states_info_gain: bool = True,
+    comfort_scale: float = 1.0,
+    soc_scale: float = 1.0,
 ) -> SimulationResult:
     """Run hierarchical two-level EcoNet simulation.
 
@@ -255,10 +265,14 @@ def run_hierarchical_simulation(
     # Initialize low-level agents
     thermo = ThermostatAgent(env_data, policy_len=policy_len,
                              gamma=gamma, learn_B=learn_B,
-                             forecast_data=forecast_data)
+                             forecast_data=forecast_data,
+                             use_states_info_gain=use_states_info_gain,
+                             comfort_scale=comfort_scale, soc_scale=soc_scale)
     battery = BatteryAgent(env_data, policy_len=policy_len,
                            gamma=gamma, initial_soc=initial_soc,
-                           forecast_data=forecast_data)
+                           forecast_data=forecast_data,
+                           use_states_info_gain=use_states_info_gain,
+                           soc_scale=soc_scale)
 
     # Initialize high-level agent
     strategy = StrategyAgent(learn_B=learn_B)
@@ -340,7 +354,7 @@ def run_tom_simulation(
     env_data: Optional[dict] = None,
     num_days: int = 7,
     policy_len: int = 4,
-    gamma: float = 16.0,
+    gamma: float = 64.0,
     learn_B: bool = True,
     initial_room_temp: float = 20.0,
     initial_soc: float = 0.5,
@@ -349,6 +363,9 @@ def run_tom_simulation(
     verbose: bool = True,
     seed: int = 42,
     forecast_data: dict = None,
+    use_states_info_gain: bool = True,
+    comfort_scale: float = 1.0,
+    soc_scale: float = 1.0,
 ) -> SimulationResult:
     """Run ToM + Belief Sharing simulation.
 
@@ -400,6 +417,8 @@ def run_tom_simulation(
         learn_B=learn_B, social_weight=social_weight,
         auditory_mode=auditory_mode,
         forecast_data=forecast_data,
+        use_states_info_gain=use_states_info_gain,
+        comfort_scale=comfort_scale,
     )
     # Battery never learns B — its transitions (charge/discharge/idle) are
     # deterministic.  Only the thermostat benefits from B-learning (outdoor
@@ -410,6 +429,8 @@ def run_tom_simulation(
         initial_soc=initial_soc, social_weight=social_weight,
         learn_B=False, auditory_mode=auditory_mode,
         forecast_data=forecast_data,
+        use_states_info_gain=use_states_info_gain,
+        soc_scale=soc_scale,
     )
 
     result = SimulationResult(
@@ -494,13 +515,16 @@ def run_sophisticated_simulation(
     env_data: Optional[dict] = None,
     num_days: int = 7,
     policy_len: int = 4,
-    gamma: float = 16.0,
+    gamma: float = 64.0,
     learn_B: bool = True,
     initial_room_temp: float = 20.0,
     initial_soc: float = 0.5,
     verbose: bool = True,
     seed: int = 42,
     forecast_data: dict = None,
+    use_states_info_gain: bool = True,
+    comfort_scale: float = 1.0,
+    soc_scale: float = 1.0,
 ) -> SimulationResult:
     """Run sophisticated inference simulation (Pitliya et al., 2025).
 
@@ -549,13 +573,17 @@ def run_sophisticated_simulation(
     # Standard aligned thermostat (with optional B-learning)
     thermo = ThermostatAgent(env_data, policy_len=policy_len,
                              gamma=gamma, learn_B=learn_B, aligned=True,
-                             forecast_data=forecast_data)
+                             forecast_data=forecast_data,
+                             use_states_info_gain=use_states_info_gain,
+                             comfort_scale=comfort_scale, soc_scale=soc_scale)
 
     # Sophisticated battery: phantom thermostat inside
     battery = SophisticatedBatteryAgent(
         env_data, policy_len=policy_len, gamma=gamma,
         initial_soc=initial_soc,
         forecast_data=forecast_data,
+        use_states_info_gain=use_states_info_gain,
+        soc_scale=soc_scale,
     )
 
     result = SimulationResult(
@@ -612,7 +640,7 @@ def run_sophisticated_tom_simulation(
     env_data: Optional[dict] = None,
     num_days: int = 7,
     policy_len: int = 4,
-    gamma: float = 16.0,
+    gamma: float = 64.0,
     learn_B: bool = True,
     initial_room_temp: float = 20.0,
     initial_soc: float = 0.5,
@@ -621,6 +649,9 @@ def run_sophisticated_tom_simulation(
     verbose: bool = True,
     seed: int = 42,
     forecast_data: dict = None,
+    use_states_info_gain: bool = True,
+    comfort_scale: float = 1.0,
+    soc_scale: float = 1.0,
 ) -> SimulationResult:
     """Run sophisticated inference + belief sharing simulation.
 
@@ -654,6 +685,8 @@ def run_sophisticated_tom_simulation(
         learn_B=learn_B, social_weight=social_weight,
         auditory_mode="full",
         forecast_data=forecast_data,
+        use_states_info_gain=use_states_info_gain,
+        comfort_scale=comfort_scale,
     )
 
     # Sophisticated battery with belief sharing
@@ -661,6 +694,8 @@ def run_sophisticated_tom_simulation(
         env_data, policy_len=policy_len, gamma=gamma,
         initial_soc=initial_soc, social_weight=social_weight,
         forecast_data=forecast_data,
+        use_states_info_gain=use_states_info_gain,
+        soc_scale=soc_scale,
     )
 
     result = SimulationResult(
@@ -736,7 +771,7 @@ def run_full_sophisticated_simulation(
     env_data: Optional[dict] = None,
     num_days: int = 7,
     policy_len: int = 6,
-    gamma: float = 16.0,
+    gamma: float = 64.0,
     learn_B: bool = True,
     initial_room_temp: float = 20.0,
     initial_soc: float = 0.5,
@@ -745,6 +780,9 @@ def run_full_sophisticated_simulation(
     verbose: bool = True,
     seed: int = 42,
     forecast_data: dict = None,
+    use_states_info_gain: bool = True,
+    comfort_scale: float = 1.0,
+    soc_scale: float = 1.0,
 ) -> SimulationResult:
     """Run symmetric sophisticated inference simulation.
 
@@ -806,6 +844,8 @@ def run_full_sophisticated_simulation(
         learn_B=learn_B, cost_scale=cost_scale,
         initial_soc=initial_soc,
         forecast_data=forecast_data,
+        use_states_info_gain=use_states_info_gain,
+        comfort_scale=comfort_scale,
     )
 
     # Sophisticated battery: phantom thermostat for HVAC prediction
@@ -813,6 +853,8 @@ def run_full_sophisticated_simulation(
         env_data, policy_len=policy_len, gamma=gamma,
         initial_soc=initial_soc,
         forecast_data=forecast_data,
+        use_states_info_gain=use_states_info_gain,
+        soc_scale=soc_scale,
     )
 
     result = SimulationResult(

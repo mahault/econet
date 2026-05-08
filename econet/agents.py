@@ -119,8 +119,12 @@ class ThermostatAgent:
 
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, learn_B: bool = False,
-                 aligned: bool = True, forecast_data: dict = None):
-        model = build_thermostat_model(env_data, policy_len=policy_len)
+                 aligned: bool = True, forecast_data: dict = None,
+                 use_states_info_gain: bool = True,
+                 comfort_scale: float = 1.0, soc_scale: float = 1.0):
+        comfort_amplitude = -4.0 * comfort_scale
+        model = build_thermostat_model(env_data, policy_len=policy_len,
+                                       comfort_amplitude=comfort_amplitude)
 
         # pB for Dirichlet learning (only B[0] = room_temp factor)
         pB = None
@@ -139,7 +143,7 @@ class ThermostatAgent:
             policy_len=policy_len,
             gamma=gamma,
             use_utility=True,
-            use_states_info_gain=True,
+            use_states_info_gain=use_states_info_gain,
             use_param_info_gain=learn_B,
             action_selection="deterministic",
             inference_algo="fpi",
@@ -149,6 +153,7 @@ class ThermostatAgent:
         )
         self.learn_B = learn_B
         self.aligned = aligned
+        self._comfort_scale = comfort_scale
         self._env_data = env_data
         self._forecast_data = forecast_data if forecast_data is not None else env_data
         self._empirical_prior = self.agent.D
@@ -198,9 +203,8 @@ class ThermostatAgent:
             target = TARGET_TEMP_OCCUPIED if occupancy else TARGET_TEMP_UNOCCUPIED
             target_idx = discretize_temp(target)
             # Amplitude: strong off-peak (-4.0), slightly relaxed during peak (-3.0)
-            # Mild relaxation preserves comfort while signaling battery to discharge.
-            # -3.0 ensures dist=2 penalty (-3.0 nats) dominates info gain (~1 nat).
-            amplitude = -3.0 if tou_high else -4.0
+            # Scaled by comfort_scale to dominate info gain.
+            amplitude = (-3.0 if tou_high else -4.0) * self._comfort_scale
             c_room = np.zeros(TEMP_LEVELS)
             for i in range(TEMP_LEVELS):
                 dist = abs(i - target_idx)
@@ -301,9 +305,12 @@ class BatteryAgent:
 
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, initial_soc: float = 0.5,
-                 aligned: bool = True, forecast_data: dict = None):
+                 aligned: bool = True, forecast_data: dict = None,
+                 use_states_info_gain: bool = True,
+                 soc_scale: float = 1.0):
         model = build_battery_model(env_data, initial_soc=initial_soc,
-                                    policy_len=policy_len)
+                                    policy_len=policy_len,
+                                    soc_scale=soc_scale)
 
         self.agent = Agent(
             A=model["A"],
@@ -316,13 +323,17 @@ class BatteryAgent:
             policy_len=policy_len,
             gamma=gamma,
             use_utility=True,
-            use_states_info_gain=True,
+            use_states_info_gain=use_states_info_gain,
             action_selection="deterministic",
             inference_algo="fpi",
             num_iter=16,
             batch_size=1,
         )
         self.aligned = aligned
+        self._soc_scale = soc_scale
+        # Instance-level SoC C vectors scaled by soc_scale
+        self._c_soc_peak = np.array([v * soc_scale for v in [2.0, 1.0, 0.0, -1.0, -2.0]])
+        self._c_soc_offpeak = np.array([v * soc_scale for v in [-1.5, -0.5, 0.0, 0.5, 1.0]])
         self._env_data = env_data
         self._forecast_data = forecast_data if forecast_data is not None else env_data
         self._empirical_prior = self.agent.D
@@ -361,9 +372,9 @@ class BatteryAgent:
         if self.aligned:
             tou_high = obs_dict.get("tou_high", 0)
             if tou_high:
-                new_c0 = jnp.array(self.C_SOC_PEAK)
+                new_c0 = jnp.array(self._c_soc_peak)
             else:
-                new_c0 = jnp.array(self.C_SOC_OFFPEAK)
+                new_c0 = jnp.array(self._c_soc_offpeak)
 
             new_c0_batched = new_c0[None, :]  # (1, 5)
             new_C = list(self.agent.C)
@@ -440,12 +451,17 @@ class SophisticatedThermostatAgent:
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, learn_B: bool = False,
                  cost_scale: float = 3.0, initial_soc: float = 0.5,
-                 forecast_data: dict = None):
+                 forecast_data: dict = None,
+                 use_states_info_gain: bool = True,
+                 comfort_scale: float = 1.0):
         from itertools import product
         from .phantom import PhantomBattery
 
+        self._comfort_scale = comfort_scale
+        comfort_amplitude = -4.0 * comfort_scale
         model = build_thermostat_model_cost_aware(
-            env_data, policy_len=policy_len, cost_scale=cost_scale)
+            env_data, policy_len=policy_len, cost_scale=cost_scale,
+            comfort_amplitude=comfort_amplitude)
 
         pB = None
         if learn_B:
@@ -476,7 +492,7 @@ class SophisticatedThermostatAgent:
             policies=policies_jax,
             gamma=gamma,
             use_utility=True,
-            use_states_info_gain=True,
+            use_states_info_gain=use_states_info_gain,
             use_param_info_gain=learn_B,
             action_selection="deterministic",
             inference_algo="fpi",
@@ -634,7 +650,7 @@ class SophisticatedThermostatAgent:
         target_idx = discretize_temp(target)
         outdoor_actual = TEMP_MIN + outdoor_idx * TEMP_STEP
         thermal_gap = abs(outdoor_actual - target)
-        amplitude = -4.0 * (1.0 + thermal_gap / 20.0)
+        amplitude = -4.0 * self._comfort_scale * (1.0 + thermal_gap / 20.0)
         c_room = np.zeros(TEMP_LEVELS)
         for i in range(TEMP_LEVELS):
             dist = abs(i - target_idx)
@@ -722,12 +738,15 @@ class SophisticatedBatteryAgent:
 
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, initial_soc: float = 0.5,
-                 forecast_data: dict = None):
+                 forecast_data: dict = None,
+                 use_states_info_gain: bool = True,
+                 soc_scale: float = 1.0):
         from .phantom import PhantomThermostat
         from .sophisticated import compute_sophisticated_efe
 
         model = build_battery_model(env_data, initial_soc=initial_soc,
-                                    policy_len=policy_len)
+                                    policy_len=policy_len,
+                                    soc_scale=soc_scale)
 
         self.agent = Agent(
             A=model["A"],
@@ -740,7 +759,7 @@ class SophisticatedBatteryAgent:
             policy_len=policy_len,
             gamma=gamma,
             use_utility=True,
-            use_states_info_gain=True,
+            use_states_info_gain=use_states_info_gain,
             action_selection="deterministic",
             inference_algo="fpi",
             num_iter=16,
@@ -748,6 +767,9 @@ class SophisticatedBatteryAgent:
         )
         self.gamma = gamma
         self.policy_len = policy_len
+        self._soc_scale = soc_scale
+        self._c_soc_peak = np.array([v * soc_scale for v in [2.0, 1.0, 0.0, -1.0, -2.0]])
+        self._c_soc_offpeak = np.array([v * soc_scale for v in [-1.5, -0.5, 0.0, 0.5, 1.0]])
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(2)
         self.qs_history = []
@@ -804,9 +826,9 @@ class SophisticatedBatteryAgent:
         # --- Dynamic C (TOU arbitrage) ---
         tou_high = obs_dict.get("tou_high", 0)
         if tou_high:
-            new_c0 = jnp.array(self.C_SOC_PEAK)
+            new_c0 = jnp.array(self._c_soc_peak)
         else:
-            new_c0 = jnp.array(self.C_SOC_OFFPEAK)
+            new_c0 = jnp.array(self._c_soc_offpeak)
         new_C = list(self.agent.C)
         new_C[0] = new_c0[None, :]
         self.agent = eqx.tree_at(lambda a: a.C, self.agent, new_C)
@@ -888,12 +910,15 @@ class SophisticatedToMBatteryAgent:
     def __init__(self, env_data: dict, policy_len: int = 4,
                  gamma: float = 16.0, initial_soc: float = 0.5,
                  social_weight: float = 1.0,
-                 forecast_data: dict = None):
+                 forecast_data: dict = None,
+                 use_states_info_gain: bool = True,
+                 soc_scale: float = 1.0):
         from .phantom import PhantomThermostat
         from .tom import ThermostatToM
 
         model = build_battery_model(env_data, initial_soc=initial_soc,
-                                    policy_len=policy_len)
+                                    policy_len=policy_len,
+                                    soc_scale=soc_scale)
 
         self.agent = Agent(
             A=model["A"],
@@ -906,7 +931,7 @@ class SophisticatedToMBatteryAgent:
             policy_len=policy_len,
             gamma=gamma,
             use_utility=True,
-            use_states_info_gain=True,
+            use_states_info_gain=use_states_info_gain,
             action_selection="deterministic",
             inference_algo="fpi",
             num_iter=16,
@@ -914,6 +939,9 @@ class SophisticatedToMBatteryAgent:
         )
         self.gamma = gamma
         self.policy_len = policy_len
+        self._soc_scale = soc_scale
+        self._c_soc_peak = np.array([v * soc_scale for v in [2.0, 1.0, 0.0, -1.0, -2.0]])
+        self._c_soc_offpeak = np.array([v * soc_scale for v in [-1.5, -0.5, 0.0, 0.5, 1.0]])
         self._empirical_prior = self.agent.D
         self._rng_key = jr.PRNGKey(3)
         self.qs_history = []
@@ -998,9 +1026,9 @@ class SophisticatedToMBatteryAgent:
         # --- Dynamic C (TOU arbitrage) ---
         tou_high = obs_dict.get("tou_high", 0)
         if tou_high:
-            new_c0 = jnp.array(self.C_SOC_PEAK)
+            new_c0 = jnp.array(self._c_soc_peak)
         else:
-            new_c0 = jnp.array(self.C_SOC_OFFPEAK)
+            new_c0 = jnp.array(self._c_soc_offpeak)
         new_C = list(self.agent.C)
         new_C[0] = new_c0[None, :]
         self.agent = eqx.tree_at(lambda a: a.C, self.agent, new_C)
@@ -1101,7 +1129,9 @@ class ToMThermostatAgent:
                  gamma: float = 16.0, learn_B: bool = False,
                  social_weight: float = 1.0,
                  auditory_mode: str = "full",
-                 forecast_data: dict = None):
+                 forecast_data: dict = None,
+                 use_states_info_gain: bool = True,
+                 comfort_scale: float = 1.0):
         """
         Parameters
         ----------
@@ -1111,14 +1141,19 @@ class ToMThermostatAgent:
             "none"    — no auditory modality (standard 4-modality model)
         forecast_data : dict, optional
             Noisy forecast data for predictive B matrices. If None, uses env_data.
+        comfort_scale : float
+            Multiplier for comfort C amplitudes. Default 1.0.
         """
         from .tom import BatteryToM, belief_to_comfort, belief_to_obs
 
         self._auditory_mode = auditory_mode
+        self._comfort_scale = comfort_scale
+        comfort_amplitude = -4.0 * comfort_scale
 
         if auditory_mode == "none":
             # Use standard thermostat model (4 modalities, no auditory)
-            model = build_thermostat_model(env_data, policy_len=policy_len)
+            model = build_thermostat_model(env_data, policy_len=policy_len,
+                                           comfort_amplitude=comfort_amplitude)
             pA = None
             pB = None
             if learn_B:
@@ -1126,6 +1161,7 @@ class ToMThermostatAgent:
         else:
             model = build_thermostat_model_tom(
                 env_data, policy_len=policy_len, social_weight=social_weight,
+                comfort_amplitude=comfort_amplitude,
             )
             if auditory_mode == "uniform":
                 # Replace auditory A with uniform distribution → zero info gain
@@ -1152,7 +1188,7 @@ class ToMThermostatAgent:
             policy_len=policy_len,
             gamma=gamma,
             use_utility=True,
-            use_states_info_gain=True,
+            use_states_info_gain=use_states_info_gain,
             use_param_info_gain=False,
             action_selection="deterministic",
             inference_algo="fpi",
@@ -1236,7 +1272,7 @@ class ToMThermostatAgent:
         tou_high = obs_dict.get("tou_high", 0)
         target = TARGET_TEMP_OCCUPIED if occupancy else TARGET_TEMP_UNOCCUPIED
         target_idx = discretize_temp(target)
-        amplitude = -3.0 if tou_high else -4.0
+        amplitude = (-3.0 if tou_high else -4.0) * self._comfort_scale
         c_room = np.zeros(TEMP_LEVELS)
         for i in range(TEMP_LEVELS):
             dist = abs(i - target_idx)
@@ -1332,7 +1368,9 @@ class ToMBatteryAgent:
                  gamma: float = 16.0, initial_soc: float = 0.5,
                  social_weight: float = 1.0, learn_B: bool = False,
                  auditory_mode: str = "full",
-                 forecast_data: dict = None):
+                 forecast_data: dict = None,
+                 use_states_info_gain: bool = True,
+                 soc_scale: float = 1.0):
         """
         Parameters
         ----------
@@ -1342,15 +1380,21 @@ class ToMBatteryAgent:
             "none"    — no auditory modality (standard 3-modality model)
         forecast_data : dict, optional
             Noisy forecast data for predictive B matrices. If None, uses env_data.
+        soc_scale : float
+            Multiplier for SoC C preference values. Default 1.0.
         """
         from .tom import ThermostatToM
 
         self._auditory_mode = auditory_mode
+        self._soc_scale = soc_scale
+        self._c_soc_peak = np.array([v * soc_scale for v in [2.0, 1.0, 0.0, -1.0, -2.0]])
+        self._c_soc_offpeak = np.array([v * soc_scale for v in [-1.5, -0.5, 0.0, 0.5, 1.0]])
 
         if auditory_mode == "none":
             # Use standard battery model (3 modalities, no auditory)
             model = build_battery_model(env_data, initial_soc=initial_soc,
-                                        policy_len=policy_len)
+                                        policy_len=policy_len,
+                                        soc_scale=soc_scale)
             pA = None
             pB = None
             if learn_B:
@@ -1359,6 +1403,7 @@ class ToMBatteryAgent:
             model = build_battery_model_tom(
                 env_data, initial_soc=initial_soc,
                 policy_len=policy_len, social_weight=social_weight,
+                soc_scale=soc_scale,
             )
             if auditory_mode == "uniform":
                 # Replace auditory A with uniform distribution → zero info gain
@@ -1385,7 +1430,7 @@ class ToMBatteryAgent:
             policy_len=policy_len,
             gamma=gamma,
             use_utility=True,
-            use_states_info_gain=True,
+            use_states_info_gain=use_states_info_gain,
             use_param_info_gain=False,
             action_selection="deterministic",
             inference_algo="fpi",
@@ -1463,9 +1508,9 @@ class ToMBatteryAgent:
         # --- Dynamic SoC C (TOU arbitrage, always on for ToM agent) ---
         tou_high = obs_dict.get("tou_high", 0)
         if tou_high:
-            new_c0 = jnp.array(self.C_SOC_PEAK)
+            new_c0 = jnp.array(self._c_soc_peak)
         else:
-            new_c0 = jnp.array(self.C_SOC_OFFPEAK)
+            new_c0 = jnp.array(self._c_soc_offpeak)
         new_C = list(self.agent.C)
         new_C[0] = new_c0[None, :]
         self.agent = eqx.tree_at(lambda a: a.C, self.agent, new_C)

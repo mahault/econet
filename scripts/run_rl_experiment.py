@@ -45,6 +45,8 @@ SEEDS = [42, 137, 256]
 CLIMATES = ["london_summer", "montreal_winter", "phoenix_summer"]
 EPISODE_COUNTS = [500, 1000, 2000, 5000, 10000, 20000]
 
+TUNED = dict(gamma=64.0, comfort_scale=3.0, soc_scale=2.0)
+
 
 def run_convergence_experiment():
     """Part 1: RL convergence curves."""
@@ -81,7 +83,7 @@ def run_convergence_experiment():
             print(f"  AIF Aligned (seed={seed})...")
             aif_result = run_simulation(
                 env_data=env_data, num_days=num_days, seed=seed,
-                aligned=True, verbose=False)
+                aligned=True, verbose=False, **TUNED)
             results[climate_key]["aif_aligned"].append(aif_result.total_cost)
 
             # AIF Sophisticated reference
@@ -89,7 +91,7 @@ def run_convergence_experiment():
             try:
                 soph_result = run_sophisticated_simulation(
                     env_data=env_data, num_days=num_days, seed=seed,
-                    verbose=False)
+                    verbose=False, **TUNED)
                 results[climate_key]["aif_sophisticated"].append(
                     soph_result.total_cost)
             except Exception as e:
@@ -101,7 +103,7 @@ def run_convergence_experiment():
             try:
                 full_result = run_full_sophisticated_simulation(
                     env_data=env_data, num_days=num_days, seed=seed,
-                    verbose=False)
+                    verbose=False, **TUNED)
                 results[climate_key]["aif_full_soph"].append(
                     full_result.total_cost)
             except Exception as e:
@@ -227,10 +229,10 @@ def run_transfer_experiment():
         # AIF on both (zero training)
         london_aif = run_simulation(
             env_data=train_data, num_days=7, seed=seed,
-            aligned=True, verbose=False)
+            aligned=True, verbose=False, **TUNED)
         phoenix_aif = run_simulation(
             env_data=phoenix_data, num_days=7, seed=seed,
-            aligned=True, verbose=False)
+            aligned=True, verbose=False, **TUNED)
 
         # Oracle on both
         london_oracle = run_oracle(train_data,

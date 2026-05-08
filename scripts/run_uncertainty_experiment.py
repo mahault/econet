@@ -59,6 +59,9 @@ METHOD_NAMES = [
 ]
 
 
+TUNED = dict(gamma=64.0, comfort_scale=3.0, soc_scale=2.0)
+
+
 def _run_method(method_name, env_data, forecast, seed, num_days):
     """Run a single method with error handling."""
     total_steps = len(env_data["time_of_day"])
@@ -70,27 +73,33 @@ def _run_method(method_name, env_data, forecast, seed, num_days):
     elif method_name == "AIF Independent":
         result = run_simulation(
             env_data=env_data, num_days=num_days, seed=seed,
-            aligned=False, verbose=False, forecast_data=forecast)
+            aligned=False, verbose=False, forecast_data=forecast,
+            **TUNED)
     elif method_name == "AIF Aligned":
         result = run_simulation(
             env_data=env_data, num_days=num_days, seed=seed,
-            aligned=True, verbose=False, forecast_data=forecast)
+            aligned=True, verbose=False, forecast_data=forecast,
+            **TUNED)
     elif method_name == "AIF Federated":
         result = run_tom_simulation(
             env_data=env_data, num_days=num_days, seed=seed,
-            verbose=False, forecast_data=forecast)
+            verbose=False, forecast_data=forecast,
+            **TUNED)
     elif method_name == "AIF Sophisticated":
         result = run_sophisticated_simulation(
             env_data=env_data, num_days=num_days, seed=seed,
-            verbose=False, forecast_data=forecast)
+            verbose=False, forecast_data=forecast,
+            **TUNED)
     elif method_name == "AIF Soph+ToM":
         result = run_sophisticated_tom_simulation(
             env_data=env_data, num_days=num_days, seed=seed,
-            verbose=False, forecast_data=forecast)
+            verbose=False, forecast_data=forecast,
+            **TUNED)
     elif method_name == "AIF Full Soph":
         result = run_full_sophisticated_simulation(
             env_data=env_data, num_days=num_days, seed=seed,
-            verbose=False, forecast_data=forecast)
+            verbose=False, forecast_data=forecast,
+            **TUNED)
     else:
         raise ValueError(f"Unknown method: {method_name}")
 

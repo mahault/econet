@@ -139,27 +139,29 @@ def build_thermostat_B() -> list:
     return B
 
 
-def build_thermostat_C() -> list:
+def build_thermostat_C(comfort_amplitude: float = -4.0) -> list:
     """Build C vectors (prior preferences) for thermostat agent.
 
     C[m] shape: (num_obs[m],)
     Higher values = more preferred observations.
 
-    The amplitude must be strong enough that utility dominates info gain
-    in EFE (~1-3 nats). Using -2.0 * dist²/4.0 gives -2.0 at dist=2,
-    -4.5 at dist=3, ensuring comfort-seeking dominates exploration.
+    Parameters
+    ----------
+    comfort_amplitude : float
+        Peak amplitude for room-temp comfort preference. More negative =
+        stronger comfort-seeking. Default -4.0. With comfort_scale=3.0
+        in the agent, effective amplitude becomes -12.0, dominating
+        info gain (~1-3 nats).
     """
     C = []
 
     # o_room_temp: Gaussian preference around target (strong)
-    # Must dominate info gain (~0.5-2 nats). Using -4.0/4.0 = -dist² gives
-    # -1.0 at 1°C, -4.0 at 2°C, -9.0 at 3°C — overwhelms epistemic drive.
     target = TARGET_TEMP_OCCUPIED
     target_idx = discretize_temp(target)
     c_room = np.zeros(TEMP_LEVELS)
     for i in range(TEMP_LEVELS):
         dist = abs(i - target_idx)
-        c_room[i] = -4.0 * dist ** 2 / 4.0
+        c_room[i] = comfort_amplitude * dist ** 2 / 4.0
     # Shift so max = 0
     c_room -= c_room.max()
     C.append(c_room)
@@ -201,12 +203,13 @@ def build_thermostat_D(initial_room_temp: float = 20.0,
 
 def build_thermostat_model(env_data: dict,
                            initial_room_temp: float = 20.0,
-                           policy_len: int = 4) -> dict:
+                           policy_len: int = 4,
+                           comfort_amplitude: float = -4.0) -> dict:
     """Build complete thermostat generative model for JAX pymdp Agent."""
     return {
         "A": build_thermostat_A(),
         "B": build_thermostat_B(),
-        "C": build_thermostat_C(),
+        "C": build_thermostat_C(comfort_amplitude=comfort_amplitude),
         "D": build_thermostat_D(
             initial_room_temp=initial_room_temp,
             initial_outdoor_temp=env_data["outdoor_temp"][0],
@@ -295,6 +298,7 @@ def build_thermostat_model_cost_aware(
     initial_room_temp: float = 20.0,
     policy_len: int = 4,
     cost_scale: float = 3.0,
+    comfort_amplitude: float = -4.0,
 ) -> dict:
     """Build 5-factor thermostat generative model with cost modality.
 
@@ -321,7 +325,7 @@ def build_thermostat_model_cost_aware(
     # Factors 0-3: standard thermostat
     A = build_thermostat_A()
     B = build_thermostat_B()
-    C = build_thermostat_C()
+    C = build_thermostat_C(comfort_amplitude=comfort_amplitude)
     D = build_thermostat_D(
         initial_room_temp=initial_room_temp,
         initial_outdoor_temp=env_data["outdoor_temp"][0],
@@ -467,18 +471,25 @@ def build_battery_B() -> list:
     return B
 
 
-def build_battery_C() -> list:
+def build_battery_C(soc_scale: float = 1.0) -> list:
     """Build C vectors for battery agent.
 
     Higher values = more preferred observations.
     Amplitudes must dominate info gain (~1-3 nats) for good TOU arbitrage.
+
+    Parameters
+    ----------
+    soc_scale : float
+        Multiplier for SoC preference values. Default 1.0.
+        With soc_scale=2.0: [-1.2, -0.6, 0, 0.6, 1.2] — comparable to
+        cost C magnitude.
     """
     C = []
 
     # SoC preference: mild preference for mid SoC (dynamic TOU flip handles arbitrage)
     c_soc = np.zeros(SOC_LEVELS)
     for i in range(SOC_LEVELS):
-        c_soc[i] = 0.3 * (i - 2)  # [-0.6, -0.3, 0, 0.3, 0.6]
+        c_soc[i] = soc_scale * 0.3 * (i - 2)
     C.append(c_soc)
 
     # Strong preference for low cost (6x scale to dominate info gain)
@@ -519,12 +530,13 @@ def build_battery_D(initial_soc: float = 0.5,
 
 def build_battery_model(env_data: dict,
                         initial_soc: float = 0.5,
-                        policy_len: int = 4) -> dict:
+                        policy_len: int = 4,
+                        soc_scale: float = 1.0) -> dict:
     """Build complete battery generative model for JAX pymdp Agent."""
     return {
         "A": build_battery_A(),
         "B": build_battery_B(),
-        "C": build_battery_C(),
+        "C": build_battery_C(soc_scale=soc_scale),
         "D": build_battery_D(
             initial_soc=initial_soc,
             initial_tou=int(env_data["tou_high"][0]),
@@ -587,14 +599,15 @@ def build_thermostat_A_tom() -> list:
     return A
 
 
-def build_thermostat_C_tom(social_weight: float = 1.0) -> list:
+def build_thermostat_C_tom(social_weight: float = 1.0,
+                           comfort_amplitude: float = -4.0) -> list:
     """Build C vectors for thermostat with social preference on auditory obs.
 
     C[0..3]: identical to standard thermostat
     C[4]: preference for HIGH battery SoC (thermostat wants battery available)
           Scaled to compete with comfort C: peak ~3.0 nats.
     """
-    C = build_thermostat_C()
+    C = build_thermostat_C(comfort_amplitude=comfort_amplitude)
 
     # Social C: thermostat prefers observing battery with capacity available
     # Scale: comfort C peaks at ~4.0 nats, so 3.0 is enough to shift marginal decisions
@@ -607,12 +620,14 @@ def build_thermostat_C_tom(social_weight: float = 1.0) -> list:
 def build_thermostat_model_tom(env_data: dict,
                                initial_room_temp: float = 20.0,
                                policy_len: int = 4,
-                               social_weight: float = 1.0) -> dict:
+                               social_weight: float = 1.0,
+                               comfort_amplitude: float = -4.0) -> dict:
     """Build thermostat generative model with auditory belief modality."""
     return {
         "A": build_thermostat_A_tom(),
         "B": build_thermostat_B(),
-        "C": build_thermostat_C_tom(social_weight=social_weight),
+        "C": build_thermostat_C_tom(social_weight=social_weight,
+                                     comfort_amplitude=comfort_amplitude),
         "D": build_thermostat_D(
             initial_room_temp=initial_room_temp,
             initial_outdoor_temp=env_data["outdoor_temp"][0],
@@ -667,14 +682,15 @@ def build_battery_A_tom() -> list:
     return A
 
 
-def build_battery_C_tom(social_weight: float = 1.0) -> list:
+def build_battery_C_tom(social_weight: float = 1.0,
+                        soc_scale: float = 1.0) -> list:
     """Build C vectors for battery with social preference on auditory obs.
 
     C[0..2]: identical to standard battery
     C[3]: preference for COMFY thermostat (peaked at comfort level 2)
           Scaled to compete with cost C: peak ~4.0 nats.
     """
-    C = build_battery_C()
+    C = build_battery_C(soc_scale=soc_scale)
 
     # Social C: battery prefers observing thermostat is comfortable
     # Must compete with cost C (peak -6.0). Using ±4.0 makes it meaningful.
@@ -687,12 +703,14 @@ def build_battery_C_tom(social_weight: float = 1.0) -> list:
 def build_battery_model_tom(env_data: dict,
                             initial_soc: float = 0.5,
                             policy_len: int = 4,
-                            social_weight: float = 1.0) -> dict:
+                            social_weight: float = 1.0,
+                            soc_scale: float = 1.0) -> dict:
     """Build battery generative model with auditory belief modality."""
     return {
         "A": build_battery_A_tom(),
         "B": build_battery_B(),
-        "C": build_battery_C_tom(social_weight=social_weight),
+        "C": build_battery_C_tom(social_weight=social_weight,
+                                  soc_scale=soc_scale),
         "D": build_battery_D(
             initial_soc=initial_soc,
             initial_tou=int(env_data["tou_high"][0]),
