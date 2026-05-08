@@ -22,6 +22,34 @@ Key features:
 - ToM mode achieves 32% cost reduction and 11% comfort improvement over aligned mode
 - Robust generalization across climate conditions without retraining
 
+## Parameter Tuning
+
+AIF agent performance is controlled by three key parameters that balance pragmatic value (utility) against epistemic value (information gain):
+
+| Parameter | Default | Tuned | Effect |
+|-----------|---------|-------|--------|
+| `gamma` | 64.0 | 64.0 | Policy precision (inverse temperature). Higher = more deterministic policy selection, less exploration |
+| `comfort_scale` | 1.0 | 3.0 | Multiplier for thermostat comfort C amplitudes. Scales both static and dynamic (TOU-dependent) preferences |
+| `soc_scale` | 1.0 | 2.0 | Multiplier for battery SoC C preferences. Scales both generative model C and dynamic TOU arbitrage vectors |
+
+These are passed to any simulation function:
+
+```python
+from econet.simulation import run_simulation
+
+result = run_simulation(
+    env_data=env_data,
+    gamma=64.0,           # policy precision
+    comfort_scale=3.0,    # 3x comfort amplitude
+    soc_scale=2.0,        # 2x SoC preference strength
+)
+```
+
+Additional configurable parameters:
+- `use_states_info_gain` (bool, default `True`): Enable/disable epistemic drive. When `False`, agents rely purely on pragmatic value.
+
+See [TUNING.md](TUNING.md) for full rationale, root cause analysis, and expected outcomes.
+
 ## Installation
 
 ```bash
@@ -44,6 +72,18 @@ Run the cost scale sweep (Pareto frontier):
 python scripts/sweep_cost_scale.py
 ```
 
+Run the uncertainty robustness experiment (8 methods x 5 noise levels x 2 climates x 3 seeds):
+
+```bash
+python scripts/run_uncertainty_experiment.py
+```
+
+Run the RL convergence and cross-climate transfer experiment:
+
+```bash
+python scripts/run_rl_experiment.py
+```
+
 Run tests:
 
 ```bash
@@ -54,21 +94,27 @@ python -m pytest tests/ -v
 
 ```
 econet/
-  agents.py           # Thermostat and Battery active inference agents
-  baselines.py        # No-HEMS, rule-based, and oracle baselines
+  agents.py           # Thermostat and Battery active inference agents (7 classes)
+  baselines.py        # No-HEMS, rule-based, oracle, MPC, and RL baselines
   climate.py          # Synthetic and real weather data generation
   environment.py      # Energy environment simulation
   generative_model.py # POMDP generative model (A, B, C, D matrices)
   metrics.py          # Cost, comfort, GHG, and battery utilization metrics
   phantom.py          # Phantom agent models for sophisticated inference
   plotting.py         # Publication figures
-  simulation.py       # Simulation runners for all coordination modes
+  simulation.py       # Simulation runners for all 6 coordination modes
   sophisticated.py    # Sophisticated (mutual phantom) coordination
+  strategy.py         # High-level strategy agent for hierarchical mode
   tom.py              # Theory of Mind / federated belief sharing
   validation.py       # Validation utilities
-scripts/              # Experiment scripts and sweeps
+scripts/
+  run_key_compare.py             # Oracle gap analysis across coordination modes
+  run_uncertainty_experiment.py  # Experiment A: forecast noise robustness
+  run_rl_experiment.py           # Experiment B: RL convergence + transfer
+  sweep_cost_scale.py            # Cost-comfort Pareto frontier
 tests/                # Test suite
 figures/              # Generated figures
+TUNING.md             # AIF parameter tuning documentation
 mainV5.tex            # Paper (revised manuscript)
 references.bib        # Bibliography
 ```
