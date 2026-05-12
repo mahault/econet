@@ -194,26 +194,25 @@ class ThermostatAgent:
             new_B[3] = jnp.array(B3)[None, :]
             self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
 
-        # --- Dynamic C (aligned mode): shift preference by occupancy + TOU ---
-        # This enables decentralized coordination: thermostat slightly relaxes
-        # during peak TOU, creating space for battery to handle cost reduction.
-        if self.aligned:
-            occupancy = obs_dict.get("occupancy", 1)
-            tou_high = obs_dict.get("tou_high", 0)
-            target = TARGET_TEMP_OCCUPIED if occupancy else TARGET_TEMP_UNOCCUPIED
-            target_idx = discretize_temp(target)
-            # Amplitude: strong off-peak (-4.0), slightly relaxed during peak (-3.0)
-            # Scaled by comfort_scale to dominate info gain.
-            amplitude = (-3.0 if tou_high else -4.0) * self._comfort_scale
-            c_room = np.zeros(TEMP_LEVELS)
-            for i in range(TEMP_LEVELS):
-                dist = abs(i - target_idx)
-                c_room[i] = amplitude * dist ** 2 / 4.0
-            c_room -= c_room.max()
-            new_c0 = jnp.array(c_room)[None, :]  # (1, TEMP_LEVELS)
-            new_C = list(self.agent.C)
-            new_C[0] = new_c0
-            self.agent = eqx.tree_at(lambda a: a.C, self.agent, new_C)
+        # --- Dynamic C: shift preference by occupancy + TOU every step ---
+        # Thermostat relaxes comfort slightly during peak TOU, creating
+        # space for battery to handle cost reduction.
+        occupancy = obs_dict.get("occupancy", 1)
+        tou_high = obs_dict.get("tou_high", 0)
+        target = TARGET_TEMP_OCCUPIED if occupancy else TARGET_TEMP_UNOCCUPIED
+        target_idx = discretize_temp(target)
+        # Amplitude: strong off-peak (-4.0), slightly relaxed during peak (-3.0)
+        # Scaled by comfort_scale to dominate info gain.
+        amplitude = (-3.0 if tou_high else -4.0) * self._comfort_scale
+        c_room = np.zeros(TEMP_LEVELS)
+        for i in range(TEMP_LEVELS):
+            dist = abs(i - target_idx)
+            c_room[i] = amplitude * dist ** 2 / 4.0
+        c_room -= c_room.max()
+        new_c0 = jnp.array(c_room)[None, :]  # (1, TEMP_LEVELS)
+        new_C = list(self.agent.C)
+        new_C[0] = new_c0
+        self.agent = eqx.tree_at(lambda a: a.C, self.agent, new_C)
 
         # Shape: (batch=1, T=1) — JAX pymdp expects a time dimension
         obs = [
@@ -366,20 +365,18 @@ class BatteryAgent:
             new_B[1] = jnp.array(B1_new)[None, :]
             self.agent = eqx.tree_at(lambda a: a.B, self.agent, new_B)
 
-        # --- Dynamic C (aligned mode): flip SoC preference based on TOU ---
-        # This enables decentralized coordination: battery discharges at peak
-        # (offsetting cost from thermostat's HVAC), charges off-peak.
-        if self.aligned:
-            tou_high = obs_dict.get("tou_high", 0)
-            if tou_high:
-                new_c0 = jnp.array(self._c_soc_peak)
-            else:
-                new_c0 = jnp.array(self._c_soc_offpeak)
+        # --- Dynamic C: flip SoC preference based on TOU every step ---
+        # Battery discharges at peak (offsetting HVAC cost), charges off-peak.
+        tou_high = obs_dict.get("tou_high", 0)
+        if tou_high:
+            new_c0 = jnp.array(self._c_soc_peak)
+        else:
+            new_c0 = jnp.array(self._c_soc_offpeak)
 
-            new_c0_batched = new_c0[None, :]  # (1, 5)
-            new_C = list(self.agent.C)
-            new_C[0] = new_c0_batched
-            self.agent = eqx.tree_at(lambda a: a.C, self.agent, new_C)
+        new_c0_batched = new_c0[None, :]  # (1, 5)
+        new_C = list(self.agent.C)
+        new_C[0] = new_c0_batched
+        self.agent = eqx.tree_at(lambda a: a.C, self.agent, new_C)
 
         # Shape: (batch=1, T=1) — JAX pymdp expects a time dimension
         obs = [
