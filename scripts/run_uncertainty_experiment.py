@@ -15,6 +15,11 @@ import numpy as np
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import jax
+jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
+jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -46,7 +51,8 @@ SEEDS = [42, 137, 256]
 CLIMATES = ["london_summer", "phoenix_summer"]
 TEMP_NOISE_SIGMAS = [0, 1, 2, 3, 4]  # C
 
-# All 8 methods to test
+# All 8 methods to test — fast methods first for early results,
+# sophisticated variants last (heavy JIT compilation)
 METHOD_NAMES = [
     "Oracle",
     "MPC",
@@ -56,6 +62,15 @@ METHOD_NAMES = [
     "AIF Sophisticated",
     "AIF Soph+ToM",
     "AIF Full Soph",
+]
+
+# Fast methods only (skip sophisticated variants for quick runs)
+METHOD_NAMES_FAST = [
+    "Oracle",
+    "MPC",
+    "AIF Independent",
+    "AIF Aligned",
+    "AIF Federated",
 ]
 
 
@@ -106,15 +121,22 @@ def _run_method(method_name, env_data, forecast, seed, num_days):
     return result.total_cost
 
 
-def run_experiment():
-    """Run uncertainty robustness experiment with all 8 methods."""
+def run_experiment(fast=False):
+    """Run uncertainty robustness experiment.
+
+    Parameters
+    ----------
+    fast : bool
+        If True, skip sophisticated variants (much faster).
+    """
+    methods = METHOD_NAMES_FAST if fast else METHOD_NAMES
     print("=" * 60)
     print("Experiment A: All-Variants Uncertainty Robustness")
-    print(f"  Methods: {len(METHOD_NAMES)}")
+    print(f"  Methods: {len(methods)}" + (" (fast mode)" if fast else ""))
     print(f"  Climates: {CLIMATES}")
     print(f"  Noise levels: {TEMP_NOISE_SIGMAS}")
     print(f"  Seeds: {SEEDS}")
-    print(f"  Total runs: {len(METHOD_NAMES) * len(TEMP_NOISE_SIGMAS) * len(CLIMATES) * len(SEEDS)}")
+    print(f"  Total runs: {len(methods) * len(TEMP_NOISE_SIGMAS) * len(CLIMATES) * len(SEEDS)}")
     print("=" * 60)
 
     # results[climate][method][sigma] = list of costs across seeds
@@ -129,7 +151,7 @@ def run_experiment():
 
         results[climate_key] = {
             m: {s: [] for s in TEMP_NOISE_SIGMAS}
-            for m in METHOD_NAMES
+            for m in methods
         }
 
         for seed in SEEDS:
@@ -152,7 +174,7 @@ def run_experiment():
                         seed=forecast_seed,
                     )
 
-                for method in METHOD_NAMES:
+                for method in methods:
                     print(f"  {method} | seed={seed}, sigma={sigma}C...",
                           end=" ", flush=True)
                     try:
@@ -171,6 +193,9 @@ def run_experiment():
 
 def plot_results(results):
     """Generate fig19_uncertainty_robustness.pdf (percentage cost increase)."""
+    # Derive method list from results (first climate's keys)
+    first_climate = next(iter(results))
+    methods = list(results[first_climate].keys())
     n_climates = len(CLIMATES)
     fig, axes = plt.subplots(1, n_climates, figsize=(6 * n_climates, 5),
                              sharey=False)
@@ -212,7 +237,7 @@ def plot_results(results):
         label = get_scenario_label(climate_key)
         data = results[climate_key]
 
-        for method in METHOD_NAMES:
+        for method in methods:
             costs_by_sigma = []
             stds_by_sigma = []
             for s in TEMP_NOISE_SIGMAS:
@@ -267,7 +292,7 @@ def plot_results(results):
         label = get_scenario_label(climate_key)
         data = results[climate_key]
 
-        for method in METHOD_NAMES:
+        for method in methods:
             means = []
             stds = []
             for s in TEMP_NOISE_SIGMAS:
@@ -307,6 +332,9 @@ def plot_results(results):
 
 def print_summary(results):
     """Print summary table of results."""
+    first_climate = next(iter(results))
+    methods = list(results[first_climate].keys())
+
     print("\n" + "=" * 90)
     print("Uncertainty Robustness Summary")
     print("=" * 90)
@@ -319,7 +347,7 @@ def print_summary(results):
               f"{'Increase':>10}")
         print("-" * 65)
 
-        for method in METHOD_NAMES:
+        for method in methods:
             vals0 = [v for v in data[method][0] if not np.isnan(v)]
             vals2 = [v for v in data[method][2] if not np.isnan(v)]
             vals4 = [v for v in data[method][4] if not np.isnan(v)]
@@ -338,9 +366,15 @@ def print_summary(results):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Uncertainty robustness experiment")
+    parser.add_argument("--fast", action="store_true",
+                        help="Skip sophisticated variants (much faster)")
+    args = parser.parse_args()
+
     start = time.time()
 
-    results = run_experiment()
+    results = run_experiment(fast=args.fast)
     plot_results(results)
     print_summary(results)
 

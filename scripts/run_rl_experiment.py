@@ -17,6 +17,11 @@ import numpy as np
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import jax
+jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
+jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
