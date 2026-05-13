@@ -59,32 +59,39 @@ print("  [5/10] RL (Q-learning, 2000 episodes) ...")
 rl = run_rl(env_data, num_episodes=2000)
 
 # AIF modes
-print("  [6/10] Independent (static C) ...")
+TUNED = dict(gamma=64.0, comfort_scale=3.0, soc_scale=2.0)
+
+print("  [6/10] Independent (dynamic C) ...")
 independent = run_simulation(env_data=env_data, num_days=num_days,
-                             policy_len=4, gamma=16.0,
-                             learn_B=False, aligned=False, verbose=False)
+                             policy_len=4,
+                             learn_B=False, aligned=False, verbose=False,
+                             **TUNED)
 
 print("  [7/10] Aligned (dynamic C) ...")
 aligned = run_simulation(env_data=env_data, num_days=num_days,
-                         policy_len=4, gamma=16.0,
-                         learn_B=False, aligned=True, verbose=False)
+                         policy_len=4,
+                         learn_B=False, aligned=True, verbose=False,
+                         **TUNED)
 
 print("  [8/10] Hierarchical (meta-agent) ...")
 hierarchical = run_hierarchical_simulation(
     env_data=env_data, num_days=num_days,
-    policy_len=4, gamma=16.0,
-    learn_B=False, verbose=False)
+    policy_len=4,
+    learn_B=False, verbose=False,
+    **TUNED)
 
 print("  [9/10] Federated (belief sharing) ...")
 federated = run_tom_simulation(env_data=env_data, num_days=num_days,
-                               policy_len=4, gamma=16.0,
-                               learn_B=False, social_weight=1.0, verbose=False)
+                               policy_len=4,
+                               learn_B=False, social_weight=1.0, verbose=False,
+                               **TUNED)
 
 print("  [10/10] ToM (sophisticated phantom inference) ...")
 tom = run_sophisticated_simulation(
     env_data=env_data, num_days=num_days,
-    policy_len=4, gamma=16.0,
-    learn_B=False, verbose=False)
+    policy_len=4,
+    learn_B=False, verbose=False,
+    **TUNED)
 
 # Compute metrics
 m_no = compute_metrics(no_hems, num_days)
