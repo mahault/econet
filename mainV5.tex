@@ -47,7 +47,7 @@
 \textsuperscript{1}VERSES, Los Angeles, CA, USA\\
 \textsuperscript{2}Spatial Web Foundation, Los Angeles, CA, USA\\
 \textsuperscript{3}Dept. of Engineering and Informatics, Univ. of Sussex, Brighton, UK\\
-\textsuperscript{4}Institut Sante et societe, UQAM, Montreal, CAN\\
+\textsuperscript{4}Institut Sant\'{e} et soci\'{e}t\'{e}, UQAM, Montreal, CAN\\
 \textsuperscript{5}Macquarie University, Sydney, AUS\\
 \textsuperscript{6}LearnableLoopAI.com, Custer, WA, USA\\
 \textsuperscript{7}Queen Square Institute of Neurology, UCL, London, UK
@@ -97,13 +97,13 @@ real weather data from four cities and two seasons, confirming robust
 generalization without retraining, since active inference agents adapt
 online through belief updating rather than offline gradient descent.
 Beyond single-agent optimization, we investigate five coordination modes
-of increasing sophistication: independent (dynamic context-dependent
-preferences), aligned (with inter-agent coordination), hierarchical
+of increasing sophistication: independent (no inter-agent
+communication), aligned (shared context signals), hierarchical
 (centralized meta-agent), federated belief sharing
 \cite{friston2024federated}, and a Theory of Mind (ToM) mode in which
 each agent maintains a \emph{phantom} model of the other's decision
 process, implementing sophisticated inference \cite{pitliya2025theory}.
-All agents use TOU-aware dynamic preference vectors ($C$ matrices) that
+All agents use ToU-aware dynamic preference vectors ($C$ matrices) that
 adapt every time step to occupancy and tariff conditions.
 In the ToM mode, the Battery Agent uses a phantom Thermostat Agent
 to predict future HVAC activity, constructing step-dependent energy
@@ -215,7 +215,7 @@ diverse climates without retraining, and can learn thermodynamic
 parameters online. We further investigate five coordination modes
 (independent, aligned, hierarchical, federated belief sharing,
 and Theory of Mind through phantom inference).
-All modes employ TOU-aware dynamic preference vectors; the coordinated
+All modes employ ToU-aware dynamic preference vectors; the coordinated
 modes additionally share beliefs or maintain phantom models of each
 other, achieving near-optimal performance across cost,
 comfort, and emissions through decentralized coordination
@@ -547,7 +547,7 @@ is a vector of preferences. Thus, as shown in Equation~\ref{eq:EFE_decomp}, the 
 goals (i.e., maximize expected utility) and that reduce uncertainty
 (i.e., maximize information gain).
 
-\section{Model Description}
+\section{Model Description}\label{sec:model_description}
 
 Our HEMS model consists of two heterogeneous agents in a one-room
 building. The energy-related devices are a HVAC system, a solar panel,
@@ -590,7 +590,6 @@ Section~\ref{sec:model_description} for details on the $B$ matrix
 structure). }\label{fig:factor=000020graph}
 \end{figure}
 
-\label{sec:model_description}
 In the figure, variables \textit{step\_{*}} (e.g., \textit{step\_battery},
 \textit{step\_solar}) refer to kWh energy use or generation associated
 with a particular state variable. Total energy use in a simulation
@@ -874,7 +873,7 @@ actual HVAC action for the current step (since it acts after the
 thermostat in the cascade), eliminating prediction error at $\tau=0$ and
 relying on the phantom only for future steps. Both agents use
 predictive $B$ matrices for exogenous factors
-(Section~\ref{sec:predictive_B}) with per-step TOU schedule awareness,
+(Section~\ref{sec:predictive_B}) with per-step ToU schedule awareness,
 enabling them to anticipate tariff transitions across the full planning
 horizon. This mode represents genuine Theory of Mind: each agent models
 the other's decision process without direct communication, relying on
@@ -1351,10 +1350,10 @@ backward induction), and tabular RL baselines are included alongside
 the non-active-inference baselines.
 
 Table~\ref{tab:coordination} summarizes the results.
-Several patterns emerge. First, all AIF modes (Independent, Aligned,
-Hierarchical, Federated, ToM) achieve comfort comparable to the No-HEMS
-deadband thermostat (108.6 vs.\ 108.6~$^{\circ}$C$\cdot$h), confirming
-that the TOU-aware dynamic $C$~vector preference structure effectively
+The results reveal clear trends. First, all AIF modes (Independent, Aligned,
+Hierarchical, Federated, ToM) achieve comfort identical to the No-HEMS
+deadband thermostat (108.6~$^{\circ}$C$\cdot$h), confirming
+that the ToU-aware dynamic $C$~vector preference structure effectively
 controls HVAC.
 The Oracle achieves the lowest cost (\$17.75) by optimizing battery scheduling
 with perfect foresight.
@@ -1369,7 +1368,7 @@ of the other agent's behavior. The Hierarchical mode matches Aligned
 exactly, confirming that centralized coordination provides no additional
 benefit when agents already respond to shared environmental signals.
 The Independent mode achieves comparable cost to the coordinated modes;
-all modes use TOU-aware dynamic $C$ vectors that adapt preferences
+all modes use ToU-aware dynamic $C$ vectors that adapt preferences
 to occupancy and tariff conditions every time step.
 The Pareto frontier (Figure~\ref{fig:pareto}) illustrates the
 cost--comfort trade-off across all conditions.
@@ -1418,7 +1417,7 @@ perfect-foresight battery scheduling. Among active inference modes,
 the Federated mode achieves the best cost (\$18.94, 6.7\% above Oracle),
 followed by the ToM (\$19.51, 9.9\%) and Aligned/Independent (\$19.54,
 10.1\%) modes, which produce identical results since both use the same
-TOU-aware dynamic preferences.
+ToU-aware dynamic preferences.
 
 \begin{figure}[htbp]
 \begin{centering}
@@ -1557,11 +1556,11 @@ difference relative to the Oracle (positive = worse than Oracle).}\label{tab:ora
 \end{tabular}
 \end{table}
 
-Several patterns are notable. First, all AIF agents (Independent and
+The results are instructive. First, all AIF agents (Independent and
 Aligned produce identical results) closely track the Oracle across all
 four climates: the average cost gap is \$0.46 (2.0\% of Oracle cost)
 and the average GHG gap is 0.90~kg (2.3\% of Oracle GHG), indicating
-that the predictive $B$ matrices and TOU-aware dynamic $C$ vectors
+that the predictive $B$ matrices and ToU-aware dynamic $C$ vectors
 enable the agent to approach globally-optimal battery scheduling
 despite having only an 8-hour rolling horizon. Results are stable across seeds, with
 standard deviations of \$0.04--0.68 for AIF cost.
@@ -1582,7 +1581,7 @@ Third, the No-HEMS baseline (which includes a fixed thermostat
 but no battery management) achieves comparable comfort to the active
 inference modes, since both use HVAC for temperature control. The
 remaining cost gap between No-HEMS and active modes reflects the
-value of TOU arbitrage: battery operation incurs round-trip losses
+value of ToU arbitrage: battery operation incurs round-trip losses
 ($\eta = 0.9$ one-way, 81\% round-trip), but enables cost savings by
 shifting consumption from high-ToU to low-ToU periods that outweigh
 these losses. The MPC baseline (with a 6-step horizon) achieves
@@ -1599,10 +1598,11 @@ Fourth, all AIF modes (Independent, Aligned, Federated, ToM)
 achieve average Oracle gaps within 2.0--2.4\% of Oracle cost, with no
 single mode dominating across all climates: Federated achieves the
 lowest cost in London (summer and winter), ToM in Montreal winter, and
-Aligned in Phoenix summer. All modes use TOU-aware dynamic $C$ vectors
+Aligned in Phoenix summer. All modes use ToU-aware dynamic $C$ vectors
 that adapt preferences to occupancy and tariff conditions, ensuring
 robust performance across climate extremes. The Independent and Aligned
-modes produce near-identical costs (Section~\ref{sec:uncertainty}),
+modes produce identical costs (Tables~\ref{tab:coordination}
+and~\ref{tab:oracle_gap}),
 confirming that the dynamic preference mechanism---rather than
 inter-agent coordination---is the primary driver of cost performance.
 The coordinated modes (Federated, ToM) provide additional benefits
@@ -1654,7 +1654,7 @@ AIF Federated   & \$20.37 & \$20.37 & \$20.37 & +0.0\% \\
 \end{tabular}
 \end{table}
 
-Several patterns emerge. In Phoenix, where cooling runs near-continuously,
+The results highlight key robustness differences. In Phoenix, where cooling runs near-continuously,
 AIF costs are completely invariant to forecast noise: the agents
 maintain \$20.44 from $\sigma=0$ through $\sigma=4$ (0.0\% increase).
 MPC, by contrast, degrades by 3.8\% as it misallocates battery resources
@@ -1664,10 +1664,10 @@ reflecting London's more variable thermal load where forecast errors
 affect HVAC scheduling. The Federated mode shows an anomalous decrease
 in London (--4.8\%), likely because noisy forecasts occasionally trigger
 more conservative battery scheduling that happens to align with the
-actual TOU pattern.
+actual ToU pattern.
 
 Independent and Aligned produce identical results across all conditions,
-confirming that both modes now use the same TOU-aware dynamic $C$
+confirming that both modes now use the same ToU-aware dynamic $C$
 vectors and differ only in whether inter-agent coordination mechanisms
 (belief sharing, phantom inference) are enabled. The Oracle's invariance
 (+0.0\% by definition) provides a lower bound, and AIF in Phoenix
@@ -1757,7 +1757,7 @@ RL (trained on Phoenix)    & ---                & \$23.22 $\pm$ 2.37 \\
 \end{table}
 
 RL trained on London degrades by 11.8\% when transferred to Phoenix,
-reflecting overfitting to London's thermal dynamics and TOU patterns.
+reflecting overfitting to London's thermal dynamics and ToU patterns.
 Even RL trained \emph{on} Phoenix (\$23.22) underperforms AIF (\$20.44),
 and exhibits substantially higher variance ($\pm$\$2.37 vs.\
 $\pm$\$0.44). AIF achieves 0\% transfer degradation because its
@@ -1805,14 +1805,14 @@ evaluation: across four climate scenarios and five random seeds,
 all AIF agents achieve costs within 2.0\% of the perfect-foresight
 Oracle on average (maximum gap 4.2\% in London summer), with the cost
 advantage over a fixed-thermostat baseline reaching 17\% in mild climates.
-This near-optimal performance arises from TOU-aware dynamic $C$ vectors
+This near-optimal performance arises from ToU-aware dynamic $C$ vectors
 and predictive $B$ matrices that enable the agent to anticipate
 environmental changes within its planning horizon. MPC with a 6-step horizon achieves near-Oracle performance,
 confirming that the planning problem is well-conditioned when given
 sufficient lookahead; the advantage of AIF lies in its probabilistic
 framework and uncertainty quantification rather than in raw performance.
 All AIF modes---including Independent---achieve near-Oracle
-performance through TOU-aware dynamic $C$ vectors. The Federated and
+performance through ToU-aware dynamic $C$ vectors. The Federated and
 ToM modes provide complementary coordination mechanisms (belief sharing
 and phantom inference, respectively) that offer additional benefits
 in scenarios where inter-agent anticipation is valuable. In extreme
@@ -1865,7 +1865,7 @@ HVAC activity, which enters the EFE computation through step-dependent
 $B_{\text{energy}}$ matrices (Equation~\ref{eq:phantom_B}). This
 construction is noteworthy because anticipatory coordination emerges
 entirely within the standard EFE framework: no custom objective function
-or additive cost penalty is required. The per-step TOU schedule within
+or additive cost penalty is required. The per-step ToU schedule within
 the custom EFE gives the sophisticated agent full-horizon tariff
 awareness, complementing the phantom's HVAC predictions.
 
@@ -1944,11 +1944,11 @@ which in turn depends on the degree of cooperation between these entities
 
 Several limitations of the current study should be acknowledged.
 First, the 2-hour time step discretization limits the model's ability
-to capture fast dynamics such as HVAC cycling or sub-hourly TOU tariffs.
+to capture fast dynamics such as HVAC cycling or sub-hourly ToU tariffs.
 Finer temporal resolution would increase the state space and planning
 horizon, potentially requiring approximate inference methods.
 Second, the $B$ matrices for exogenous factors (outdoor temperature,
-occupancy, TOU) are currently rebuilt from known schedules and forecasts
+occupancy, ToU) are currently rebuilt from known schedules and forecasts
 at each step; in a real deployment, forecast uncertainty would grow
 with the prediction horizon and should be modeled explicitly.
 Third, the 2-day baseline comparison (Table~\ref{tab:baseline}) uses
