@@ -28,8 +28,8 @@ We thank the reviewers for their careful reading of our manuscript and their con
     \item New Section~5.5: Validation (energy balance, thermodynamic consistency, battery constraints, gamma sensitivity---Figure~12).
     \item New Section~4: Predictive transition matrices for exogenous factors (ToU schedule, occupancy calendar, weather forecast), using known schedules and Gaussian kernels to improve planning accuracy.
     \item New Section~4: Cost-aware Thermostat Agent with five-factor generative model including energy demand state and cost observation modality, driven by a phantom Battery Agent.
-    \item New Section~4.1: Fifth coordination mode (Sophisticated mutual phantom inference) where each agent maintains a model of the other's decision process.
-    \item New Section~5.7: Cost-aware planning results with predictive $B$ matrices.
+    \item New Section~4.1: Theory of Mind (ToM) coordination mode based on sophisticated inference \cite{pitliya2025theory}, where the Battery Agent maintains a phantom model of the Thermostat Agent's decision process for anticipatory planning with step-dependent energy transition matrices.
+    \item New Section~5.7: Cost-aware planning results with predictive $B$ matrices across four climate scenarios and five random seeds.
     \item Updated literature review with recent 2024--2025 references.
     \item Language simplification and formatting corrections throughout.
 \end{itemize}
@@ -76,7 +76,7 @@ Battery utilization (\%) & 68.3 & 0.0 & 41.7 \\
 \end{tabular}
 \end{table}
 
-EcoNet achieves a 6.1\% cost reduction and 23.0\% GHG reduction relative to the No-HEMS baseline, while maintaining substantially better thermal comfort. The Rule-Based baseline (charge during off-peak, discharge during peak, thermostat at fixed setpoints) performs worse on cost because it does not adapt to context. Figure~9 provides a visualization of these comparisons.
+In the initial 2-day comparison (Table~1), EcoNet achieves a cost reduction relative to the No-HEMS baseline, while maintaining substantially better thermal comfort. The Rule-Based baseline performs worse on cost because it does not adapt to context. In the subsequent revision, we added multi-seed 7-day experiments (Tables~4 and~5) comparing up to ten conditions---including Oracle, MPC, and RL baselines alongside five active inference coordination modes---across four climate scenarios averaged over 5~seeds. The Aligned mode achieves costs within 2\% of a perfect-foresight Oracle on average. Additionally, we now report results for a Theory of Mind (ToM) coordination mode based on sophisticated inference \cite{pitliya2025theory}, where the Battery Agent maintains a phantom model of the Thermostat Agent's decision process for anticipatory planning. All three coordinated AIF modes (Aligned, Federated, ToM) achieve costs within 2--2.4\% of Oracle on average, with no single mode dominating across all climates.
 
 \subsection*{Comment 1.3: Only tested on synthetic data for a single climate}
 
@@ -144,7 +144,7 @@ We have preserved technical precision where necessary for the active inference f
 \response We have revised the abstract to explicitly state the quantitative impact:
 
 \begin{quote}
-``Simulation results demonstrate that EcoNet achieves a 6.1\% reduction in energy costs and a 23.0\% reduction in grid-associated greenhouse gas emissions relative to unmanaged operation, while reducing thermal comfort deviations by 66\%. These results are robust across four distinct climate zones tested with real meteorological data.''
+``Across four synthetic climate scenarios (5 seeds each), the Aligned mode achieves costs within 2\% of a perfect-foresight Oracle on average. The Federated and ToM modes achieve comparable performance while providing complementary coordination mechanisms: belief sharing for decentralized consensus, and phantom inference for anticipatory planning without communication. Across real-weather scenarios, all modes generalize without retraining.''
 \end{quote}
 
 The Introduction (Section~1, final paragraph) now contains a clear impact statement connecting the proof-of-concept results to the broader potential for active inference in multi-agent HEMS coordination, with explicit reference to the 16\% average cost savings benchmark reported in recent field demonstrations (Khabbazi et al., 2025).
@@ -184,7 +184,7 @@ These definitions allow readers to appreciate the structural differences when th
 \response This has been addressed in the new Section~5.3 (see our response to Reviewer~1, Comment~1.2 above). We compare EcoNet against:
 
 \begin{itemize}
-    \item \textbf{No-HEMS}: No active management; thermostat remains off, battery unused. This represents the worst case for comfort and a passive baseline for cost (household draws all energy from grid at prevailing rates).
+    \item \textbf{No-HEMS}: No active management; a deadband thermostat maintains temperature within a fixed comfort band, battery unused. The household draws all energy from the grid at prevailing rates without TOU optimization.
     \item \textbf{Rule-Based}: A simple time-based controller that charges the battery during off-peak hours, discharges during peak hours, and maintains fixed thermostat setpoints (heat if below 18$^\circ$C, cool if above 24$^\circ$C).
 \end{itemize}
 
@@ -296,8 +296,10 @@ R3-8 & Equation numbering & Sections~3 and 4 \\
 R3-9 & B matrix context & Sections~4 and 5 \\
 --- & Predictive $B$ matrices & Section~4 (new) \\
 --- & Cost-aware Thermostat & Section~4 (new) \\
---- & Sophisticated mode & Section~4.1 (new) \\
+--- & ToM (sophisticated inference) & Section~4.1 (new) \\
 --- & Cost-aware results & Section~5.7 (new) \\
+--- & Multi-seed experiments & Tables~4, 5 (5 seeds, 4 climates) \\
+--- & Oracle/MPC/RL baselines & Section~5.3, Tables~4, 5 \\
 \bottomrule
 \end{tabular}
 \end{table}
