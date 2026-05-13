@@ -538,7 +538,7 @@ semi-realistic conditions. Tracking and controlling the temperature,
 energy use, solar generation, and other processes in a real building
 is not the purpose of this study. Rather, the purpose is to demonstrate
 proof of concept. A pseudo-factor graph depicting the model is provided
-in Figure \ref{fig:factor=000020graph}.
+in Figure~\ref{fig:factor=000020graph}.
 
 \begin{figure}
 \begin{centering}
@@ -725,7 +725,7 @@ The result of this update is used as input for updating total energy
 (\textit{step\_total}). We used a modified version of pymdp that allows
 this kind of cascading updates.
 
-Figure \ref{fig:outdoor_temp} shows an example of input data, in
+Figure~\ref{fig:outdoor_temp} shows an example of input data, in
 this case outdoor temperature and baseline energy use.
 
 \begin{figure}
@@ -901,7 +901,7 @@ target room temperatures, in spite of the under-powered HVAC system.
 They also try to reduce costs and plan ahead to charge the battery
 for later use.
 
-Figure \ref{fig:B-neg_efe} shows the distribution of (negative) expected
+Figure~\ref{fig:B-neg_efe} shows the distribution of (negative) expected
 free energy (i.e., $G_{\pi}$ from Equation~\ref{eq:EFE}) over all policies for the Battery Agent
 (each agent evaluated 729 policies in each simulation step). Negative
 EFE for the selected policy in each simulation step is shown in red,
@@ -924,7 +924,7 @@ or preferences in a context-sensitive fashion.
 \caption{Distribution of negative EFE over policies and simulation steps. }\label{fig:B-neg_efe}
 \end{figure}
 
-Figure \ref{fig:A-temperature}, top panel, shows observed outdoor
+Figure~\ref{fig:A-temperature}, top panel, shows observed outdoor
 and room temperatures, given the series of actions selected by the
 agents. In a worst case scenario, for a house with no HVAC system,
 the two curves would be superimposed. The middle panel shows the difference
@@ -932,7 +932,7 @@ between observed room temperature and target temperatures ($18^{\circ}$C
 for occupied status, $16^{\circ}$C for unoccupied). The daily average
 cumulative sum of absolute temperature differences from the targets
 is 22 degrees C, which is less than the worst case of 64 degrees,
-shown in Figure \ref{fig:outdoor_temp}. The bottom panel shows the
+shown in Figure~\ref{fig:outdoor_temp}. The bottom panel shows the
 selected thermostat actions.
 
 The Thermostat Agent tends to turn on the heat when the room is below
@@ -955,7 +955,7 @@ thermostat actions (bottom panel). }\label{fig:A-temperature}
 The Battery agent has a preference to minimize energy costs. One way
 it can do so is to discharge the battery during high-ToU periods,
 when energy is expensive. Discharged energy is used by the household,
-if needed, and any excess is sold back to the grid. Figure \ref{fig:B-soc-vs-tou}
+if needed, and any excess is sold back to the grid. Figure~\ref{fig:B-soc-vs-tou}
 shows that the agent tends to use the battery (indicated by a drop
 in SoC) during high-ToU periods (red shading). Similarly, it tries
 to charge the battery during low-ToU periods.
@@ -987,7 +987,7 @@ As a variation of this problem, we alter the ToU schedule so that
 during each evening there is a three-hour high-ToU period. The policy
 length is again six steps. Now the agent charges the battery fully
 (to a SoC of 0.8) so that it can discharge during all high-ToU steps.
-Results are shown in Figure \ref{fig:variation} (left panel). As
+Results are shown in Figure~\ref{fig:variation} (left panel). As
 another variation, we run the same simulation but this time using
 a policy length of four steps (eight hours). Now the agent cannot
 see far enough into the future to perfectly plan ahead for the three-hour
@@ -1008,7 +1008,7 @@ and four steps (right panel). Beliefs about ToU rates are shaded.
 }\label{fig:variation}
 \end{figure}
 
-Figure \ref{fig:B-step-cost-vs-tou} shows total energy use in the
+Figure~\ref{fig:B-step-cost-vs-tou} shows total energy use in the
 house during each step of the original problem, along with solar generation
 and battery charge and discharge. HVAC and baseline energy are not
 shown. Battery charge registers as a positive energy, and discharge
@@ -1027,7 +1027,7 @@ periods. Charging also tends to coincide with solar generation.
 \caption{Agent beliefs about total, battery, and solar energy use. }\label{fig:B-step-cost-vs-tou}
 \end{figure}
 
-Figure \ref{fig:B-ghg} shows agent beliefs about total energy use
+Figure~\ref{fig:B-ghg} shows agent beliefs about total energy use
 in comparison to grid-associated GHG rates (top panel). Peak energy
 use is offset by the agent to avoid high-GHG rate periods. The bottom
 panel shows beliefs about GHG emissions due to energy use.
@@ -1054,7 +1054,7 @@ transition, the corresponding concentration parameter is incremented,
 so that the agent's model gradually converges to the true transition
 probabilities.
 
-Figure \ref{fig:learning} shows the results of a 10-day learning run.
+Figure~\ref{fig:learning} shows the results of a 10-day learning run.
 The top panel shows that the mean absolute EFE drops during learning,
 as the agent becomes more confident about inferred policies. The bottom
 panel shows that the daily cumulative temperature deviation decreases
@@ -1098,7 +1098,7 @@ knowledge of the system model.
 trained for 500 episodes on the same environment, then evaluated greedily.
 \end{itemize}
 
-Table \ref{tab:baseline} summarizes the 2-day results.\footnote{The
+Table~\ref{tab:baseline} summarizes the 2-day results.\footnote{The
 2-day baseline comparison uses the initial experimental configuration
 (policy length 6, single seed). The comprehensive multi-seed evaluation
 is presented in Tables~\ref{tab:coordination} and~\ref{tab:oracle_gap}.}
@@ -1142,7 +1142,7 @@ Avg temp deviation ($^{\circ}$C) & 1.8 & 3.9 & 2.4 \\
 \end{tabular}
 \end{table}
 
-Figure \ref{fig:baseline_comparison} shows a visual comparison of
+Figure~\ref{fig:baseline_comparison} shows a visual comparison of
 daily costs and GHG emissions across the three approaches.
 
 \begin{figure}
@@ -1175,7 +1175,7 @@ lower emissions per kWh than the fossil-heavy grids serving Phoenix
 and Miami. ToU rate schedules are adapted to reflect typical utility
 pricing in each region.
 
-Table \ref{tab:climate} presents the results for both coordination modes.
+Table~\ref{tab:climate} presents the results for both coordination modes.
 Several patterns emerge. First, winter scenarios consistently show higher
 costs and emissions than summer, primarily due to increased heating demand.
 Second, Montreal shows dramatically lower GHG emissions despite moderate
@@ -1186,7 +1186,7 @@ mode achieves cost and GHG reductions in six of eight scenarios compared
 to Aligned, with an aggregate reduction of 0.6\% in cost and 0.6\% in
 GHG emissions. The comfort trade-off is modest (+2.1\% aggregate),
 consistent with the cost-comfort Pareto trade-off observed in the synthetic
-experiments (Section \ref{sec:coordination_results}). Notably, neither mode requires any retraining or parameter adjustment
+experiments (Section~\ref{sec:coordination_results}). Notably, neither mode requires any retraining or parameter adjustment
 between scenarios. The same generative model structure adapts to each
 environment through its belief updating mechanism.
 
@@ -1215,8 +1215,8 @@ Miami & Winter & 17.78 & 59.80 & 152.7 & 17.64 & 59.20 & 152.7 \\
 \end{tabular}
 \end{table}
 
-Figure \ref{fig:climate_real} visualizes the side-by-side comparison
-of both modes across all eight scenarios, and Figure \ref{fig:7day_real}
+Figure~\ref{fig:climate_real} visualizes the side-by-side comparison
+of both modes across all eight scenarios, and Figure~\ref{fig:7day_real}
 shows the extended 7-day simulation traces for London summer under the
 Federated mode, illustrating how the agent's battery scheduling adapts
 to day-to-day weather variability while incorporating the partner agent's
@@ -1241,10 +1241,10 @@ solar/load profiles.}\label{fig:7day_real}
 \end{figure}
 
 We also conducted climate sensitivity experiments using synthetic but
-climate-representative weather profiles (Figure \ref{fig:climate_synthetic}).
+climate-representative weather profiles (Figure~\ref{fig:climate_synthetic}).
 Results are qualitatively consistent with the real-weather analysis,
 confirming that synthetic data can serve as a reasonable proxy for
-initial system evaluation. Figure \ref{fig:7day_synthetic} shows the
+initial system evaluation. Figure~\ref{fig:7day_synthetic} shows the
 corresponding extended 7-day simulation with synthetic weather inputs.
 
 \begin{figure}
@@ -1293,7 +1293,7 @@ that would violate these bounds.
 \textbf{Gamma sensitivity analysis.} The precision parameter $\gamma$
 (inverse temperature) in the softmax policy selection
 (Equation~\ref{eq:policy_posterior}) controls the degree of
-determinism in action selection. Figure \ref{fig:gamma} shows cost
+determinism in action selection. Figure~\ref{fig:gamma} shows cost
 and GHG performance as $\gamma$ varies from 1 to 32. Performance is
 relatively stable for $\gamma \geq 4$, with a slight degradation at
 $\gamma = 1$ where the agent's policy selection becomes too stochastic.
