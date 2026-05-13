@@ -60,68 +60,30 @@
 Using Active Inference}
 \maketitle
 \begin{abstract}
-Advances in automated systems afford new opportunities for intelligent
-management of energy at household, local area, and utility scales.
-Home Energy Management Systems (HEMS) can play a role by optimizing
-the schedule and use of household energy devices and resources. One
-challenge is that the goals of a household can be complex and conflicting.
-For example, a household might wish to reduce energy costs and grid-associated
-greenhouse gas emissions, yet keep room temperatures comfortable.
-Another challenge is that an intelligent HEMS agent must make decisions
-under uncertainty. An agent must plan actions into the future, but
-weather and solar generation forecasts, for example, provide inherently
-uncertain estimates of future conditions. This paper introduces EcoNet,
-a Bayesian approach to household and neighborhood energy management
-that is based on active inference. The aim is to improve energy management
-and coordination, while accommodating uncertainties and taking into
-account potentially conditional and conflicting goals and preferences.
-Unlike reinforcement learning approaches that require extensive training data
-and lack principled uncertainty handling, or model predictive control methods
-that assume deterministic dynamics, EcoNet leverages the free energy principle
-to unify perception, learning, and action under a single objective.
-A key technical contribution is the use of \emph{predictive transition
-matrices} for exogenous state factors: rather than treating future outdoor
-temperatures, occupancy, and electricity tariffs as static, each agent
-updates its generative model's $B$ matrices at every time step using
-available forecasts (weather predictions, published tariff schedules,
-occupancy calendars). This allows the agent to anticipate environmental
-changes within its planning horizon without requiring hand-crafted rules
-or additional inference machinery.
-Simulation results across four climate scenarios (5 seeds each)
-demonstrate that the system achieves energy costs within 2\% of a
-perfect-foresight Oracle on average, and up to 17\% below a
-fixed-thermostat baseline lacking battery management, while
-simultaneously reducing greenhouse gas emissions.
-We further validate the approach across diverse climate conditions using
-real weather data from four cities and two seasons, confirming robust
-generalization without retraining, since active inference agents adapt
-online through belief updating rather than offline gradient descent.
-Beyond single-agent optimization, we investigate five coordination modes
-of increasing sophistication: independent (no inter-agent
-communication), aligned (shared context signals), hierarchical
-(centralized meta-agent), federated belief sharing
-\cite{friston2024federated}, and a Theory of Mind (ToM) mode in which
-each agent maintains a \emph{phantom} model of the other's decision
-process, implementing sophisticated inference \cite{pitliya2025theory}.
-All agents use ToU-aware dynamic preference vectors ($C$ matrices) that
-adapt every time step to occupancy and tariff conditions.
-In the ToM mode, the Battery Agent uses a phantom Thermostat Agent
-to predict future HVAC activity, constructing step-dependent energy
-transition matrices that anticipate cost fluctuations across the
-planning horizon. Across four synthetic climate scenarios (5 seeds each),
-the Aligned mode achieves costs within 2\% of a perfect-foresight
-Oracle on average. The Federated and ToM modes achieve comparable
-performance while providing complementary coordination mechanisms:
-belief sharing for decentralized consensus, and phantom inference for
-anticipatory planning without communication. Across real-weather
-scenarios, all modes generalize without retraining.
-Uncertainty robustness experiments show that AIF maintains stable
-costs under increasing forecast noise ($\sigma$ up to 4$^{\circ}$C),
-while MPC degrades by 3.8--8.5\%. A reinforcement learning comparison
-further demonstrates that AIF achieves near-Oracle performance with
-zero training, whereas tabular Q-learning requires 20,000+ episodes
-and still incurs 14--26\% higher costs, with an additional 11.8\%
-degradation when transferring across climates.
+This paper introduces EcoNet, a multi-agent active inference framework
+for household energy management that coordinates a Thermostat Agent and
+a Battery Agent to balance energy cost, thermal comfort, and greenhouse
+gas emissions under uncertainty. Unlike reinforcement learning (RL),
+which requires extensive offline training, or model predictive control
+(MPC), which assumes deterministic dynamics, EcoNet leverages the free
+energy principle to unify perception, learning, and action. A key
+contribution is the use of \emph{predictive transition matrices} that
+incorporate weather forecasts, tariff schedules, and occupancy calendars
+into the generative model at every time step, combined with ToU-aware
+dynamic preference vectors that adapt to context. We investigate
+coordination through federated belief sharing
+\cite{friston2024federated} and a Theory of Mind (ToM) mode based on
+sophisticated inference \cite{pitliya2025theory}, where agents maintain
+phantom models of each other's decision processes. Across four climate
+scenarios (5 seeds each), EcoNet achieves costs within 2\% of a
+perfect-foresight Oracle, generalizes across diverse real-weather
+conditions without retraining, and maintains stable performance under
+forecast noise ($\sigma$ up to 4$^{\circ}$C) while MPC degrades by
+3.8--8.5\%. A systematic RL comparison shows that EcoNet achieves
+near-Oracle performance with zero training, whereas tabular Q-learning
+requires 20,000+ episodes and still incurs 14--26\% higher costs in
+temperate and hot climates, with 11.8\% additional degradation when
+transferring across climates.
 \end{abstract}
 \keywords{Active Inference\and Home Energy Management Systems\and Distributed Energy Resources\and Multi-Agent Systems\and Bayesian Inference\and Smart Grid\and Theory of Mind\and Sophisticated Inference\and Federated Belief Sharing\and Predictive Transition Matrices}
 
@@ -212,13 +174,13 @@ such as between households and over larger regions. We demonstrate
 that EcoNet achieves lower energy costs and greenhouse gas emissions
 than both unmanaged and rule-based baselines, generalizes across
 diverse climates without retraining, and can learn thermodynamic
-parameters online. We further investigate five coordination modes
-(independent, aligned, hierarchical, federated belief sharing,
-and Theory of Mind through phantom inference).
-All modes employ ToU-aware dynamic preference vectors; the coordinated
-modes additionally share beliefs or maintain phantom models of each
-other, achieving near-optimal performance across cost,
-comfort, and emissions through decentralized coordination
+parameters online. We further investigate coordination through
+federated belief sharing and Theory of Mind (phantom inference),
+building on a baseline of ToU-aware dynamic preference vectors
+shared by all agents. The coordinated modes additionally share beliefs
+or maintain phantom models of each other, achieving near-optimal
+performance across cost, comfort, and emissions through decentralized
+coordination
 \cite{friston2024federated,vasil2020world,pitliya2025theory}.
 
 The following sections discuss related work, provide an overview of
@@ -782,25 +744,30 @@ for indoor room temperature, for a house without a HVAC system. }\label{fig:outd
 \subsection{Coordination Modes}\label{sec:coordination}
 
 A key question in multi-agent HEMS is how agents should coordinate their
-actions. We investigate five coordination modes of increasing sophistication:
+actions. We investigate five coordination architectures, three of which
+serve as baseline modes and two of which introduce genuinely distinct
+coordination mechanisms:
 
-\textbf{Independent.} Each agent dynamically adjusts its $C$ vector
-based on local environmental signals (ToU period, occupancy). During
-peak periods, the Battery Agent's preference for discharge increases;
-the Thermostat Agent relaxes comfort preferences when unoccupied. There
-is no inter-agent coordination signal beyond the cascading update
-structure described above.
-
-\textbf{Aligned (decentralized).} Identical to Independent in terms of
-dynamic $C$ vector adjustment. The distinction is conceptual: Aligned
-mode is designed to support additional inter-agent coordination
-mechanisms (e.g., shared context signals) when available, though in the
-current implementation both modes produce equivalent behavior.
-
-\textbf{Hierarchical (centralized).} A meta-agent observes both agents'
-states and explicitly sets their $C$ vectors to achieve global coordination.
-This centralizes decision-making but requires full observability of both
-agents' hidden states.
+\textbf{Independent / Aligned / Hierarchical (baseline modes).}
+Each agent dynamically adjusts its $C$ vector based on local
+environmental signals (ToU period, occupancy). During peak periods, the
+Battery Agent's preference for discharge increases; the Thermostat Agent
+relaxes comfort preferences when unoccupied. In the \emph{Independent}
+mode, there is no inter-agent coordination signal beyond the cascading
+update structure described above. The \emph{Aligned} mode is
+architecturally identical but is conceptually intended for scenarios
+where shared context signals are available. The \emph{Hierarchical}
+mode introduces a meta-agent that can explicitly set $C$ vectors, but
+since both agents already adapt their preferences to the same
+environmental signals, the meta-agent provides no additional benefit in
+the current single-household setting. Empirically, all three modes
+produce identical results (Tables~\ref{tab:coordination}
+and~\ref{tab:oracle_gap}), confirming that the ToU-aware dynamic $C$
+vectors, rather than the coordination architecture, are the primary
+driver of near-optimal performance. We retain these three modes to
+delineate the design space and to provide a clear baseline against which
+the genuinely distinct coordination mechanisms (Federated and ToM) can
+be evaluated.
 
 \textbf{Federated (decentralized belief sharing).}\label{sec:federated_mode} Following Friston et al.
 \cite{friston2024federated}, agents share posterior beliefs rather than
@@ -1364,12 +1331,10 @@ Battery Agent to anticipate the Thermostat's comfort state.
 The ToM mode (\$19.51) closely matches the Aligned mode (\$19.54)
 without requiring any communication channel---the phantom thermostat
 provides comparable coordination benefit through implicit prediction
-of the other agent's behavior. The Hierarchical mode matches Aligned
-exactly, confirming that centralized coordination provides no additional
-benefit when agents already respond to shared environmental signals.
-The Independent mode achieves comparable cost to the coordinated modes;
-all modes use ToU-aware dynamic $C$ vectors that adapt preferences
-to occupancy and tariff conditions every time step.
+of the other agent's behavior. The Independent, Aligned, and Hierarchical modes produce identical
+results (\$19.54), confirming that the ToU-aware dynamic $C$ vectors
+alone account for the cost performance---centralized coordination adds
+no benefit when agents already adapt preferences to environmental signals.
 The Pareto frontier (Figure~\ref{fig:pareto}) illustrates the
 cost--comfort trade-off across all conditions.
 The tabular RL baseline performs poorly (\$29.36), reflecting the
@@ -1586,11 +1551,17 @@ value of ToU arbitrage: battery operation incurs round-trip losses
 shifting consumption from high-ToU to low-ToU periods that outweigh
 these losses. The MPC baseline (with a 6-step horizon) achieves
 near-Oracle performance, confirming that the planning problem is
-well-conditioned when given sufficient lookahead. However, MPC
-requires a complete model of system dynamics and deterministic
-optimization, whereas the AIF agent learns its generative model
-structure and provides uncertainty quantification through posterior
-beliefs. The tabular RL baseline performs poorly, reflecting the
+well-conditioned when given sufficient lookahead. In London winter,
+MPC slightly undercuts the Oracle on cost (\$33.78 vs.\ \$34.01)
+because both use backward induction with the same multi-objective
+function (cost $+$ comfort$\,\times\,$0.3), but the Oracle optimizes
+globally while MPC re-plans at each step; MPC's lower cost comes at
+worse comfort (123.7 vs.\ 127.2~$^{\circ}$C$\cdot$h), reflecting a
+different trade-off on the Pareto frontier rather than a true
+dominance. MPC requires a complete model of system dynamics and
+deterministic optimization, whereas the AIF agent learns its generative
+model structure and provides uncertainty quantification through
+posterior beliefs. The tabular RL baseline performs poorly, reflecting the
 challenge of learning effective policies from scratch with coarse
 state discretization.
 
@@ -1869,18 +1840,20 @@ or additive cost penalty is required. The per-step ToU schedule within
 the custom EFE gives the sophisticated agent full-horizon tariff
 awareness, complementing the phantom's HVAC predictions.
 
-From a broader perspective, the five coordination modes map onto a
-spectrum from fully decentralized (Independent) to fully centralized
-(Hierarchical), with the Aligned, Federated, and ToM modes occupying
-intermediate positions. The Federated and ToM modes represent two
-complementary approaches to inter-agent coordination: explicit belief
-sharing and implicit phantom inference. Both achieve comparable
-performance, but through different mechanisms---the Federated mode
+From a broader perspective, a notable finding is that the three baseline
+architectures (Independent, Aligned, Hierarchical) produce identical
+results, demonstrating that the ToU-aware dynamic $C$ vectors---rather
+than coordination architecture---are the primary mechanism driving
+near-optimal performance in the single-household setting. The Federated
+and ToM modes represent two genuinely distinct coordination mechanisms:
+explicit belief sharing and implicit phantom inference. Both achieve
+comparable performance through different mechanisms---the Federated mode
 requires a communication channel while the ToM mode requires shared
-knowledge of the other agent's generative model structure. This
-suggests that the coordination benefit arises from the agents'
-ability to anticipate each other's behavior, regardless of the
-specific mechanism. This finding is consistent with work on
+knowledge of the other agent's generative model structure. The
+equivalence of the baseline modes suggests that coordination benefits
+will become more pronounced in multi-household settings, where agents
+cannot observe the same environmental signals and must explicitly
+communicate or model each other to anticipate correlated behavior. This finding is consistent with work on
 collective active inference \cite{heins2024collective,heins2023spin}
 and Theory of Mind through sophisticated inference
 \cite{pitliya2025theory}.
