@@ -75,10 +75,10 @@ coordination through federated belief sharing
 \cite{friston2024federated} and a Theory of Mind (ToM) mode based on
 sophisticated inference \cite{pitliya2025theory}, where agents maintain
 phantom models of each other's decision processes. Across four climate
-scenarios (5 seeds each), EcoNet achieves costs within 2\% of a
+scenarios (5 seeds each), EcoNet achieves costs within 2--4\% of a
 perfect-foresight Oracle, generalizes across diverse real-weather
-conditions without retraining, and maintains stable performance under
-forecast noise ($\sigma$ up to 4$^{\circ}$C) while MPC degrades by
+conditions without retraining, and maintains stable or comparable performance under
+forecast noise ($\sigma$ up to 4$^{\circ}$C), with MPC degrading by
 3.8--8.5\%. A systematic RL comparison shows that EcoNet achieves
 near-Oracle performance with zero training, whereas tabular Q-learning
 requires 20,000+ episodes and still incurs 14--26\% higher costs in
@@ -187,8 +187,8 @@ The following sections discuss related work, provide an overview of
 active inference, describe the EcoNet model including a novel
 belief-sharing architecture for inter-agent coordination, present
 simulation results including baseline comparisons, climate sensitivity
-analyses, and a five-mode coordination study, and discuss outcomes
-and future work.
+analyses, a coordination study, uncertainty robustness analysis, and
+a reinforcement learning comparison, and discuss outcomes and future work.
 
 \section{Related Work}
 
@@ -261,7 +261,7 @@ compare RL and MPC systems for minimizing energy costs of solar battery
 systems \cite{Hartel-2023}. Wang et al. compare several RL algorithms
 against MPC and rule-based systems for heat pump control \cite{WANG2023120430}.
 
-Despite their potential benefits neither MPC nor RL have seen wide
+Despite their potential benefits, neither MPC nor RL has seen wide
 adoption in DER/energy management \cite{khabbazi2025}. Wang and Hong
 identify three barriers for RL: 1) time-consuming and data-intensive
 training requirements; 2) security and robustness concerns (regarding
@@ -500,7 +500,7 @@ step can be decomposed as
 
 \begin{align}
 G_{\pi} & =-\mathbb{E}_{q(o,s\mid\pi)}\left[\ln\frac{p(o,s\mid\pi)}{q(s\mid\pi)}\right]\nonumber \\
- & =\underset{\mathit{risk}}{\underbrace{D_{\mathrm{KL}}\left[q(o\mid\pi)\parallel p(o\mid C)\right]}}+\underset{\mathit{ambiguity}}{\underbrace{\mathbb{E}_{q(s\mid\pi)}\left[H(p(o\mid s)\right]}}\label{eq:EFE_decomp}\\
+ & =\underset{\mathit{risk}}{\underbrace{D_{\mathrm{KL}}\left[q(o\mid\pi)\parallel p(o\mid C)\right]}}+\underset{\mathit{ambiguity}}{\underbrace{\mathbb{E}_{q(s\mid\pi)}\left[H(p(o\mid s))\right]}}\label{eq:EFE_decomp}\\
  & =-\underset{\mathit{information\,gain}}{\underbrace{\mathbb{E}_{q(o,s\mid\pi)}\left[\ln\frac{q(s\mid o,\pi)}{q(s\mid\pi)}\right]}}-\underset{\mathit{expected\,utility}}{\underbrace{\mathbb{E}_{q(o\mid\pi)}\left[\ln p(o\mid C)\right]}\,,}\nonumber
 \end{align}
 
@@ -874,15 +874,18 @@ disabled (i.e., transition dynamics are specified, not learned online).
 Results are averaged over 5 random seeds
 $\{42, 137, 256, 789, 1024\}$. The cost-aware
 symmetric sophisticated mode uses a policy length of 6 steps where noted.
-In this section, we present results for seven experimental analyses:
+In this section, we present results for nine experimental analyses:
 (1) a deterministic problem with accurate agent models;
 (2) a parameter learning scenario where the thermodynamic model is unknown;
 (3) a baseline comparison against unmanaged and rule-based controllers;
 (4) a climate sensitivity analysis using real weather data from four cities;
 (5) a validation analysis confirming physical constraint adherence;
 (6) a coordination mode comparison including federated belief sharing
-and Theory of Mind through phantom inference; and
-(7) a multi-climate Oracle gap analysis with all coordination modes.
+and Theory of Mind through phantom inference;
+(7) a multi-climate Oracle gap analysis with all coordination modes;
+(8) an uncertainty robustness analysis under increasing forecast noise; and
+(9) a reinforcement learning comparison evaluating sample efficiency and
+cross-climate transfer.
 
 \subsection{Deterministic Scenario}
 
@@ -1000,7 +1003,7 @@ discharge during all high-ToU steps.
 \end{tabular}
 \par\end{centering}
 \caption{Agent beliefs about battery state of charge when an evening high-ToU
-period last for three hours. Policy length is six steps (left panel)
+period lasts for three hours. Policy length is six steps (left panel)
 and four steps (right panel). Beliefs about ToU rates are shaded.
 }\label{fig:variation}
 \end{figure}
@@ -1455,7 +1458,7 @@ Oracle gap across diverse thermal regimes.
 
 Table~\ref{tab:oracle_gap} reports the results.
 The architecture additionally supports a symmetric sophisticated mode
-(Section~\ref{sec:tom_mode}) in which the Thermostat Agent also uses a
+(the ToM mode described in Section~\ref{sec:coordination}) in which the Thermostat Agent also uses a
 five-factor generative model with a phantom Battery Agent. However,
 the expanded policy space ($3^6 = 729$ policies with 5 state factors)
 makes full multi-seed evaluation across all climate scenarios
@@ -1565,7 +1568,7 @@ posterior beliefs. The tabular RL baseline performs poorly, reflecting the
 challenge of learning effective policies from scratch with coarse
 state discretization.
 
-Fourth, all AIF modes (Independent, Aligned, Federated, ToM)
+Fourth, all AIF modes (Independent, Aligned, Hierarchical, Federated, ToM)
 achieve average Oracle gaps within 2.0--2.4\% of Oracle cost, with no
 single mode dominating across all climates: Federated achieves the
 lowest cost in London (summer and winter), ToM in Montreal winter, and
@@ -1797,7 +1800,7 @@ beliefs (full probability distributions, not point estimates) enables
 agents to form decentralized consensus about shared world states, with
 the magnitude of the benefit depending on the degree of coordination
 opportunity in the environment. The auditory A matrix formulation
-(Section~\ref{sec:federated_mode}) ensures that social preferences
+(described in Section~\ref{sec:coordination}) ensures that social preferences
 emerge naturally within the standard EFE computation
 (Equation~\ref{eq:social_efe}), requiring no additional optimization
 objective or hand-tuned coordination mechanism. The reliability parameter
