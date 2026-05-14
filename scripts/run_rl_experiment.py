@@ -13,6 +13,7 @@ Output: fig20_rl_convergence.pdf
 
 import sys
 import time
+import pickle
 import numpy as np
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -36,6 +37,9 @@ from econet.baselines import run_oracle, run_rl, run_rl_improved
 
 FIGURE_DIR = Path(__file__).parent.parent / "figures"
 FIGURE_DIR.mkdir(exist_ok=True)
+
+CACHE_DIR = Path(__file__).parent.parent / "results_cache"
+CACHE_DIR.mkdir(exist_ok=True)
 
 plt.rcParams.update({
     "font.size": 11,
@@ -283,20 +287,6 @@ def plot_convergence(results):
         ax.axhline(aif_mean, color="#2ecc71", linestyle="-.",
                     linewidth=1.5, label=f"AIF Aligned (${aif_mean:.2f})")
 
-        # AIF Sophisticated reference line
-        soph_vals = [v for v in data["aif_sophisticated"] if not np.isnan(v)]
-        if soph_vals:
-            soph_mean = np.mean(soph_vals)
-            ax.axhline(soph_mean, color="#9b59b6", linestyle=":",
-                        linewidth=1.5, label=f"AIF Soph (${soph_mean:.2f})")
-
-        # AIF Full Sophisticated reference line
-        full_vals = [v for v in data["aif_full_soph"] if not np.isnan(v)]
-        if full_vals:
-            full_mean = np.mean(full_vals)
-            ax.axhline(full_mean, color="#1abc9c", linestyle=":",
-                        linewidth=1.5, label=f"AIF Full Soph (${full_mean:.2f})")
-
         # RL original (10 bins)
         means_orig = [np.mean(data["rl_original"][n]) for n in EPISODE_COUNTS]
         stds_orig = [np.std(data["rl_original"][n]) for n in EPISODE_COUNTS]
@@ -356,10 +346,32 @@ def plot_transfer(transfer_results):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="RL convergence experiment")
+    parser.add_argument("--plot-only", action="store_true",
+                        help="Skip experiment, load cached results and re-plot")
+    args = parser.parse_args()
+
+    conv_cache = CACHE_DIR / "expB_convergence.pkl"
+    xfer_cache = CACHE_DIR / "expB_transfer.pkl"
+
     start = time.time()
 
-    # Part 1: Convergence curves
-    convergence_results = run_convergence_experiment()
+    if args.plot_only:
+        if not conv_cache.exists():
+            print(f"ERROR: No cached results at {conv_cache}")
+            print("Run without --plot-only first to generate results.")
+            sys.exit(1)
+        with open(conv_cache, "rb") as f:
+            convergence_results = pickle.load(f)
+        print(f"Loaded cached convergence results from {conv_cache}")
+    else:
+        # Part 1: Convergence curves
+        convergence_results = run_convergence_experiment()
+        with open(conv_cache, "wb") as f:
+            pickle.dump(convergence_results, f)
+        print(f"Convergence results cached to {conv_cache}")
+
     plot_convergence(convergence_results)
 
     # Print summary
@@ -374,22 +386,23 @@ def main():
         rl_gap = (best_rl - oracle) / oracle * 100
         summary = (f"  {label}: Oracle=${oracle:.2f}, "
                    f"AIF Aligned={aif_gap:+.1f}%, RL-20k={rl_gap:+.1f}%")
-
-        soph_vals = [v for v in data["aif_sophisticated"] if not np.isnan(v)]
-        if soph_vals:
-            soph_gap = (np.mean(soph_vals) - oracle) / oracle * 100
-            summary += f", AIF Soph={soph_gap:+.1f}%"
-
-        full_vals = [v for v in data["aif_full_soph"] if not np.isnan(v)]
-        if full_vals:
-            full_gap = (np.mean(full_vals) - oracle) / oracle * 100
-            summary += f", AIF Full Soph={full_gap:+.1f}%"
-
         print(summary)
 
-    # Part 2: Cross-climate transfer
-    transfer_results = run_transfer_experiment()
-    plot_transfer(transfer_results)
+    if args.plot_only:
+        if xfer_cache.exists():
+            with open(xfer_cache, "rb") as f:
+                transfer_results = pickle.load(f)
+            print(f"Loaded cached transfer results from {xfer_cache}")
+            plot_transfer(transfer_results)
+        else:
+            print("No cached transfer results — skipping Part 2.")
+    else:
+        # Part 2: Cross-climate transfer
+        transfer_results = run_transfer_experiment()
+        with open(xfer_cache, "wb") as f:
+            pickle.dump(transfer_results, f)
+        print(f"Transfer results cached to {xfer_cache}")
+        plot_transfer(transfer_results)
 
     elapsed = time.time() - start
     print(f"\nExperiment B complete. Total time: {elapsed:.1f}s")

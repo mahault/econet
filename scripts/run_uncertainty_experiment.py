@@ -11,6 +11,7 @@ Output: fig19_uncertainty_robustness.pdf, fig19_uncertainty_absolute.pdf
 import sys
 import time
 import traceback
+import pickle
 import numpy as np
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -37,6 +38,9 @@ from econet.baselines import run_oracle, run_mpc
 
 FIGURE_DIR = Path(__file__).parent.parent / "figures"
 FIGURE_DIR.mkdir(exist_ok=True)
+
+CACHE_DIR = Path(__file__).parent.parent / "results_cache"
+CACHE_DIR.mkdir(exist_ok=True)
 
 plt.rcParams.update({
     "font.size": 11,
@@ -193,9 +197,11 @@ def run_experiment(fast=False):
 
 def plot_results(results):
     """Generate fig19_uncertainty_robustness.pdf (percentage cost increase)."""
-    # Derive method list from results (first climate's keys)
+    # Only plot these three methods for clarity
+    PLOT_METHODS = ["Oracle", "MPC", "AIF Aligned"]
     first_climate = next(iter(results))
-    methods = list(results[first_climate].keys())
+    all_methods = list(results[first_climate].keys())
+    methods = [m for m in all_methods if m in PLOT_METHODS]
     n_climates = len(CLIMATES)
     fig, axes = plt.subplots(1, n_climates, figsize=(6 * n_climates, 5),
                              sharey=False)
@@ -370,11 +376,28 @@ def main():
     parser = argparse.ArgumentParser(description="Uncertainty robustness experiment")
     parser.add_argument("--fast", action="store_true",
                         help="Skip sophisticated variants (much faster)")
+    parser.add_argument("--plot-only", action="store_true",
+                        help="Skip experiment, load cached results and re-plot")
     args = parser.parse_args()
+
+    cache_path = CACHE_DIR / "expA_results.pkl"
 
     start = time.time()
 
-    results = run_experiment(fast=args.fast)
+    if args.plot_only:
+        if not cache_path.exists():
+            print(f"ERROR: No cached results at {cache_path}")
+            print("Run without --plot-only first to generate results.")
+            sys.exit(1)
+        with open(cache_path, "rb") as f:
+            results = pickle.load(f)
+        print(f"Loaded cached results from {cache_path}")
+    else:
+        results = run_experiment(fast=args.fast)
+        with open(cache_path, "wb") as f:
+            pickle.dump(results, f)
+        print(f"Results cached to {cache_path}")
+
     plot_results(results)
     print_summary(results)
 

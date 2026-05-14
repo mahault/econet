@@ -133,17 +133,28 @@ for bar, val in zip(bars, costs):
     axes[0].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.2,
                 f"${val:.1f}", ha="center", va="bottom", fontsize=6)
 
-# Comfort deviation
+# Comfort deviation (cap y-axis to keep non-RL bars readable)
 comforts = [m.comfort_deviation_total for m in metrics_list]
+COMFORT_YLIM = 150
 bars = axes[1].bar(range(n_modes), comforts, color=colors, edgecolor="black", linewidth=0.5)
 axes[1].set_xticks(range(n_modes))
 axes[1].set_xticklabels(modes, fontsize=7)
 axes[1].set_ylabel("Comfort Deviation ($^\\circ$C$\\cdot$h)")
 axes[1].set_title("(b) Comfort Deviation")
+axes[1].set_ylim(0, COMFORT_YLIM)
 axes[1].grid(True, alpha=0.3, axis="y")
 for bar, val in zip(bars, comforts):
-    axes[1].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 2,
-                f"{val:.0f}", ha="center", va="bottom", fontsize=6)
+    if val > COMFORT_YLIM:
+        # Bar is clipped — annotate with actual value and upward arrow
+        axes[1].annotate(
+            f"{val:.0f}", xy=(bar.get_x() + bar.get_width() / 2, COMFORT_YLIM),
+            xytext=(bar.get_x() + bar.get_width() / 2, COMFORT_YLIM * 0.88),
+            ha="center", va="top", fontsize=7, fontweight="bold",
+            arrowprops=dict(arrowstyle="->", color="black", lw=1.2),
+        )
+    else:
+        axes[1].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 2,
+                    f"{val:.0f}", ha="center", va="bottom", fontsize=6)
 
 # GHG
 results_all = [no_hems, rule, oracle, mpc, rl,
@@ -260,48 +271,48 @@ plt.close(fig)
 # ═════════════════════════════════════════════════════════════════════
 # Fig 17: Cost vs Comfort Pareto frontier
 # ═════════════════════════════════════════════════════════════════════
-fig, ax = plt.subplots(figsize=(9, 7))
+fig, ax = plt.subplots(figsize=(9, 6))
 
+# Consolidate Independent/Aligned/Hierarchical/ToM into one "AIF (all modes)" point
+# (they overlap at nearly identical cost/comfort). Keep Federated separate.
+aif_consolidated_cost = np.mean([m.total_cost for m in [m_indep, m_ali, m_hier, m_tom]])
+aif_consolidated_comfort = np.mean([m.comfort_deviation_total for m in [m_indep, m_ali, m_hier, m_tom]])
+
+# Exclude No-HEMS and RL — their extreme values compress the interesting region
 pareto_data = [
-    ("No-HEMS", m_no, "#bdc3c7", "s"),
-    ("Rule-Based", m_rule, "#95a5a6", "D"),
-    ("Oracle", m_oracle, "#f39c12", "P"),
-    ("MPC", m_mpc, "#e67e22", "X"),
-    ("RL", m_rl, "#d35400", "H"),
-    ("Independent", m_indep, "#3498db", "v"),
-    ("Aligned", m_ali, "#2ecc71", "^"),
-    ("Hierarchical", m_hier, "#9b59b6", "d"),
-    ("Federated", m_fed, "#e74c3c", "o"),
-    ("ToM", m_tom, "#c0392b", "*"),
+    ("Rule-Based", m_rule.total_cost, m_rule.comfort_deviation_total, "#95a5a6", "D"),
+    ("Oracle", m_oracle.total_cost, m_oracle.comfort_deviation_total, "#f39c12", "P"),
+    ("MPC", m_mpc.total_cost, m_mpc.comfort_deviation_total, "#e67e22", "X"),
+    ("AIF (all modes)", aif_consolidated_cost, aif_consolidated_comfort, "#2ecc71", "^"),
+    ("AIF Federated", m_fed.total_cost, m_fed.comfort_deviation_total, "#e74c3c", "o"),
 ]
 
-for name, m, color, marker in pareto_data:
-    ax.scatter(m.total_cost, m.comfort_deviation_total,
+for name, cost, comfort, color, marker in pareto_data:
+    ax.scatter(cost, comfort,
               c=color, s=150, marker=marker, edgecolors="black",
               linewidth=0.8, zorder=5, label=name)
 
-# Connect the AIF variants with a line to show the frontier
-aif_modes = [(m_indep, "Independent"), (m_ali, "Aligned"),
-             (m_hier, "Hierarchical"), (m_fed, "Federated"), (m_tom, "ToM")]
-aif_costs = [m.total_cost for m, _ in aif_modes]
-aif_comforts = [m.comfort_deviation_total for m, _ in aif_modes]
-sorted_pairs = sorted(zip(aif_costs, aif_comforts))
-ax.plot([p[0] for p in sorted_pairs], [p[1] for p in sorted_pairs],
-       "k--", alpha=0.4, lw=1.5, label="AIF frontier")
+# Zoom axes to interesting range with padding
+all_costs = [c for _, c, _, _, _ in pareto_data]
+all_comforts = [c for _, _, c, _, _ in pareto_data]
+cost_pad = (max(all_costs) - min(all_costs)) * 0.25 + 0.5
+comfort_pad = (max(all_comforts) - min(all_comforts)) * 0.35 + 0.5
+ax.set_xlim(min(all_costs) - cost_pad, max(all_costs) + cost_pad)
+ax.set_ylim(min(all_comforts) - comfort_pad, max(all_comforts) + comfort_pad)
 
 ax.set_xlabel("Total Energy Cost ($)", fontsize=12)
 ax.set_ylabel("Comfort Deviation ($^\\circ$C$\\cdot$h)", fontsize=12)
 ax.set_title("Cost vs. Comfort Pareto Frontier (7-day simulation)", fontsize=13)
-ax.legend(loc="upper right", fontsize=8, ncol=2)
+ax.legend(loc="upper right", fontsize=9)
 ax.grid(True, alpha=0.3)
 
-# Annotate direction
-all_costs = [m.total_cost for _, m, _, _ in pareto_data]
-all_comforts = [m.comfort_deviation_total for _, m, _, _ in pareto_data]
-ax.annotate("", xy=(min(all_costs) - 1, min(all_comforts) - 15),
-           xytext=(min(all_costs) + 2, min(all_comforts) + 15),
+# Annotate direction — place "Better" arrow inside the visible axes
+arrow_x = min(all_costs) - cost_pad * 0.3
+arrow_y = min(all_comforts) - comfort_pad * 0.3
+ax.annotate("", xy=(arrow_x - 0.3, arrow_y - 0.2),
+           xytext=(arrow_x + 0.3, arrow_y + 0.2),
            arrowprops=dict(arrowstyle="->", color="green", lw=2))
-ax.text(min(all_costs) - 0.5, min(all_comforts) - 5,
+ax.text(arrow_x - 0.25, arrow_y + 0.25,
        "Better", fontsize=10, color="green", fontstyle="italic")
 
 fig.tight_layout()
