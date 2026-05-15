@@ -28,11 +28,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from econet.climate import generate_climate_week, get_scenario_label, CLIMATE_PROFILES
-from econet.simulation import (
-    run_simulation,
-    run_sophisticated_simulation,
-    run_full_sophisticated_simulation,
-)
+from econet.simulation import run_simulation
 from econet.baselines import run_oracle, run_rl, run_rl_improved
 
 FIGURE_DIR = Path(__file__).parent.parent / "figures"
@@ -74,8 +70,6 @@ def run_convergence_experiment():
             "rl_original": {},
             "rl_improved": {},
             "aif_aligned": [],
-            "aif_sophisticated": [],
-            "aif_full_soph": [],
             "oracle": [],
         }
 
@@ -94,30 +88,6 @@ def run_convergence_experiment():
                 env_data=env_data, num_days=num_days, seed=seed,
                 aligned=True, verbose=False, **TUNED)
             results[climate_key]["aif_aligned"].append(aif_result.total_cost)
-
-            # AIF Sophisticated reference
-            print(f"  AIF Sophisticated (seed={seed})...")
-            try:
-                soph_result = run_sophisticated_simulation(
-                    env_data=env_data, num_days=num_days, seed=seed,
-                    verbose=False, **TUNED)
-                results[climate_key]["aif_sophisticated"].append(
-                    soph_result.total_cost)
-            except Exception as e:
-                print(f"    Sophisticated failed: {e}")
-                results[climate_key]["aif_sophisticated"].append(np.nan)
-
-            # AIF Full Sophisticated reference
-            print(f"  AIF Full Soph (seed={seed})...")
-            try:
-                full_result = run_full_sophisticated_simulation(
-                    env_data=env_data, num_days=num_days, seed=seed,
-                    verbose=False, **TUNED)
-                results[climate_key]["aif_full_soph"].append(
-                    full_result.total_cost)
-            except Exception as e:
-                print(f"    Full Soph failed: {e}")
-                results[climate_key]["aif_full_soph"].append(np.nan)
 
             # RL original (10 bins) at each episode count
             for n_ep in EPISODE_COUNTS:
