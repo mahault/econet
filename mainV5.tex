@@ -132,7 +132,7 @@ goals and preferences, and accommodating inherent uncertainties associated
 with, for example, forecasts of weather, room occupancy, and energy
 use and generation.
 
-A key distinction from existing approaches is that active inference provides
+Active inference differs from existing approaches by providing
 a single principled framework that naturally integrates planning under uncertainty,
 online model learning, and multi-objective optimization. Reinforcement learning
 (RL) methods require extensive offline training, lack built-in uncertainty
@@ -144,7 +144,7 @@ active inference agents maintain probabilistic beliefs over hidden states,
 learn transition dynamics from data via Dirichlet concentration updates, and
 select actions by minimizing expected free energy---a quantity that automatically
 balances goal-seeking (exploitation) with uncertainty reduction (exploration).
-Furthermore, the preference structure of active inference agents can be made
+The preference structure of active inference agents can also be made
 context-dependent (e.g., the Battery Agent's preferences shift between charging
 and discharging based on the current ToU period), providing a principled mechanism
 for handling conditional goals that would require ad hoc reward shaping in RL.
@@ -311,7 +311,7 @@ known. Unlike RL, active inference models are not usually data intensive,
 and conditional constraints on behavior can be easily implemented.
 Also unlike RL, a method for balancing agent exploration and exploitation
 stems from first principles \cite{tschantz2020reinforcementlearningactiveinference}.
-Furthermore, active inference is apt for multiple constraint satisfaction
+Active inference is also apt for multiple constraint satisfaction
 problems, by specifying preferences in terms of probability distributions
 over outcomes. Active inference is particularly useful when an agent
 must plan ahead and can act to reduce uncertainty. For these reasons,
@@ -342,7 +342,7 @@ the fully observable case) and against RL approaches in which the
 RL model is trained on a history of observables for the buildings
 in question. Compared to RL models, the active inference agent predicts
 indoor room temperatures that align more closely with desired temperatures.
-This is not surprising, perhaps, as the active inference model encapsulates
+This is expected, as the active inference model encapsulates
 prior knowledge about the HVAC and other systems. The community manager
 successfully optimizes battery usage and market transactions, even
 under an extreme pricing scenario.
@@ -743,7 +743,7 @@ for indoor room temperature, for a house without a HVAC system. }\label{fig:outd
 
 \subsection{Coordination Modes}\label{sec:coordination}
 
-A key question in multi-agent HEMS is how agents should coordinate their
+A central question in multi-agent HEMS is how agents should coordinate their
 actions. We investigate five coordination architectures, three of which
 serve as baseline modes and two of which introduce genuinely distinct
 coordination mechanisms:
@@ -1100,7 +1100,7 @@ trained for 500 episodes on the same environment, then evaluated greedily.
 
 Table~\ref{tab:baseline} summarizes the 2-day results.\footnote{The
 2-day baseline comparison uses the initial experimental configuration
-(policy length 6, single seed). The comprehensive multi-seed evaluation
+(policy length 6, single seed). The multi-seed evaluation
 is presented in Tables~\ref{tab:coordination} and~\ref{tab:oracle_gap}.}
 EcoNet achieves the lowest total cost (\$3.17) and lowest GHG emissions
 (7.25 kg CO$_2$). The rule-based controller performs worst because it
@@ -1123,7 +1123,7 @@ after 500 training episodes, requires offline training on the
 specific environment and lacks built-in uncertainty quantification.
 EcoNet's active inference agents operate without offline training,
 naturally quantify uncertainty through posterior beliefs, and can learn
-unknown parameters online---advantages that become increasingly important
+unknown parameters online---advantages that matter more
 as the environment becomes less predictable.
 
 \begin{table}[htbp]
@@ -1156,7 +1156,7 @@ and Rule-Based controllers.}\label{fig:baseline_comparison}
 
 \subsection{Climate Sensitivity Analysis}\label{sec:climate}
 
-A key question for any HEMS approach is whether it generalizes across
+An important question for any HEMS approach is whether it generalizes across
 different climate conditions. To investigate this, we run EcoNet using
 real hourly weather data obtained from the Iowa Environmental Mesonet
 (IEM) Automated Surface Observing System (ASOS) network for four
@@ -1186,7 +1186,7 @@ mode achieves cost and GHG reductions in six of eight scenarios compared
 to Aligned, with an aggregate reduction of 0.6\% in cost and 0.6\% in
 GHG emissions. The comfort trade-off is modest (+2.1\% aggregate),
 consistent with the cost-comfort Pareto trade-off observed in the synthetic
-experiments (Section~\ref{sec:coordination_results}). Notably, neither mode requires any retraining or parameter adjustment
+experiments (Section~\ref{sec:coordination_results}). Neither mode requires any retraining or parameter adjustment
 between scenarios. The same generative model structure adapts to each
 environment through its belief updating mechanism.
 
@@ -1371,9 +1371,10 @@ EcoNet: ToM          & 19.58 & 108.6 & 35.4 \\
 \begin{centering}
 \includegraphics[width=0.85\columnwidth]{figures/fig17_pareto_frontier}
 \par\end{centering}
-\caption{Cost vs. Comfort Pareto frontier for all ten conditions.
-The Federated and ToM modes achieve the best cost--comfort trade-off among
-active inference modes.}\label{fig:pareto}
+\caption{Cost vs. Comfort Pareto frontier. RL and No-HEMS are omitted
+to focus on the interesting region; their values appear in
+Table~\ref{tab:coordination}. All non-Federated AIF modes overlap at
+a single point and are consolidated.}\label{fig:pareto}
 \end{figure}
 
 Figure~\ref{fig:coordination_bars} shows the comparison across all
@@ -1522,7 +1523,7 @@ difference relative to the Oracle (positive = worse than Oracle).}\label{tab:ora
 \end{tabular}
 \end{table}
 
-The results are instructive. First, all AIF agents (Independent and
+First, all AIF agents (Independent and
 Aligned produce identical results) closely track the Oracle across all
 four climates: the average cost gap is \$0.46 (2.0\% of Oracle cost)
 and the average GHG gap is 0.90~kg (2.3\% of Oracle GHG), indicating
@@ -1626,7 +1627,7 @@ AIF Federated   & \$20.37 & \$20.37 & \$20.37 & +0.0\% \\
 \end{tabular}
 \end{table}
 
-The results highlight key robustness differences. In Phoenix, where cooling runs near-continuously,
+In Phoenix, where cooling runs near-continuously,
 AIF costs are completely invariant to forecast noise: the agents
 maintain \$20.44 from $\sigma=0$ through $\sigma=4$ (0.0\% increase).
 MPC, by contrast, degrades by 3.8\% as it misallocates battery resources
@@ -1652,8 +1653,9 @@ decisions when HVAC demand is dominated by cooling.
 \includegraphics[width=0.85\columnwidth]{figures/fig19_uncertainty_robustness}
 \par\end{centering}
 \caption{Percentage cost increase relative to zero-noise baseline
-($\sigma=0$) as forecast noise increases. AIF agents in Phoenix show
-zero degradation, while MPC degrades by 3.8\%.}\label{fig:uncertainty_robustness}
+($\sigma=0$) as forecast noise increases, for Oracle, MPC, and AIF Aligned.
+AIF in Phoenix shows zero degradation, while MPC degrades by
+3.8\%.}\label{fig:uncertainty_robustness}
 \end{figure}
 
 \begin{figure}[htbp]
@@ -1671,8 +1673,7 @@ AIF costs in Phoenix remain flat across all noise levels.}\label{fig:uncertainty
 To contextualize AIF performance, we compare against improved tabular
 Q-learning baselines with both the original (10-bin) and improved
 (34-bin) state discretizations, trained for 500 to 20,000 episodes.
-Three AIF reference methods are included: Aligned, Sophisticated
-(symmetric phantoms), and Full Sophisticated (expanded policy space).
+AIF Aligned is included as a reference (zero-training baseline).
 Three climates (London summer, Montreal winter, Phoenix summer) are
 tested with 3 random seeds each.
 
@@ -1706,7 +1707,7 @@ dominant ``always heat'' strategy. However, this comes at the cost of
 severely degraded comfort (4026.9~$^{\circ}$C$\cdot$h in the
 Section~\ref{sec:cost_aware_results} results).
 
-\textbf{Cross-climate transfer.} A key advantage of model-based approaches
+\textbf{Cross-climate transfer.} An advantage of model-based approaches
 is generalization without retraining. We train RL on London summer
 (10,000 episodes) and evaluate on Phoenix summer without retraining.
 Table~\ref{tab:rl_transfer} shows the results.
@@ -1742,7 +1743,7 @@ relying on pre-trained policies.
 \par\end{centering}
 \caption{RL convergence curves for original (10-bin) and improved
 (34-bin) Q-learning across three climates. Dashed horizontal lines show
-Oracle, AIF Aligned, and AIF Sophisticated reference costs. Even at
+Oracle and AIF Aligned reference costs. Even at
 20,000 training episodes, RL does not reach AIF-level performance
 in London or Phoenix.}\label{fig:rl_convergence}
 \end{figure}
@@ -1752,7 +1753,7 @@ in London or Phoenix.}\label{fig:rl_convergence}
 
 As societal electrification increases in response to climate change,
 and as the penetration of DER devices in distribution grids increases,
-it becomes increasingly important for grid flexibility and stability
+it becomes more important for grid flexibility and stability
 not only that each energy device is intelligently managed, but that
 management is coordinated between devices within a household, between
 households of a neighborhood or complex, and across regions of the
@@ -1835,13 +1836,13 @@ prediction can be integrated into the active inference framework. The
 Battery Agent's phantom thermostat provides a probabilistic forecast of
 HVAC activity, which enters the EFE computation through step-dependent
 $B_{\text{energy}}$ matrices (Equation~\ref{eq:phantom_B}). This
-construction is noteworthy because anticipatory coordination emerges
+construction means that anticipatory coordination emerges
 entirely within the standard EFE framework: no custom objective function
 or additive cost penalty is required. The per-step ToU schedule within
 the custom EFE gives the sophisticated agent full-horizon tariff
 awareness, complementing the phantom's HVAC predictions.
 
-From a broader perspective, a notable finding is that the three baseline
+The three baseline
 architectures (Independent, Aligned, Hierarchical) produce identical
 results, demonstrating that the ToU-aware dynamic $C$ vectors---rather
 than coordination architecture---are the primary mechanism driving
@@ -1879,8 +1880,8 @@ probabilistic structure: rather than optimizing against a single
 forecast trajectory, the agent maintains beliefs over possible states
 and selects policies that perform well across this distribution.
 
-The RL comparison (Section~\ref{sec:rl_comparison}) highlights three
-distinctive advantages of the active inference approach. First, AIF
+The RL comparison (Section~\ref{sec:rl_comparison}) reveals three
+advantages of active inference. First, AIF
 achieves near-Oracle costs (2.9--4.0\% gap) with zero training,
 while tabular Q-learning requires 20,000 episodes and still incurs
 14.5--26.2\% higher costs. Second, AIF generalizes across climates
@@ -1889,9 +1890,9 @@ overfit to training conditions (11.8\% degradation from London to
 Phoenix). Third, AIF exhibits substantially lower variance across
 seeds ($\pm$\$0.44 vs.\ $\pm$\$2.37), reflecting the stability of
 model-based planning compared to value-function estimation. These
-results suggest that model-based active inference is better suited
-than model-free RL for energy management, where the physical dynamics
-are well-understood and can be encoded directly in the generative model.
+results suggest that model-based active inference outperforms
+model-free RL for energy management, where the physical dynamics
+are known and can be encoded directly in the generative model.
 
 The validation results (Section~\ref{sec:validation}) confirm that
 the simulation framework maintains physical consistency. This is
@@ -1916,7 +1917,7 @@ which in turn depends on the degree of cooperation between these entities
 
 \subsection{Limitations}
 
-Several limitations of the current study should be acknowledged.
+The current study has several limitations.
 First, the 2-hour time step discretization limits the model's ability
 to capture fast dynamics such as HVAC cycling or sub-hourly ToU tariffs.
 Finer temporal resolution would increase the state space and planning
@@ -1993,8 +1994,8 @@ Experimental results demonstrate that EcoNet reduces costs relative to
 unmanaged operation and rule-based control, generalizes across diverse
 climate conditions without retraining, and achieves coordination benefits
 through both phantom inference (ToM) and belief sharing (Federated). The
-comparison with Oracle, MPC, and RL baselines highlights active
-inference's distinctive advantages: online learning without offline
+comparison with Oracle, MPC, and RL baselines shows active
+inference's advantages: online learning without offline
 training, principled uncertainty quantification, and interpretable
 preference structures through $C$ vectors. Uncertainty robustness
 experiments confirm that AIF maintains stable costs under forecast
