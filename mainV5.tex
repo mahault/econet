@@ -133,7 +133,7 @@ with, for example, forecasts of weather, room occupancy, and energy
 use and generation.
 
 Active inference differs from existing approaches by providing
-a single principled framework that naturally integrates planning under uncertainty,
+a single framework that integrates planning under uncertainty,
 online model learning, and multi-objective optimization. Reinforcement learning
 (RL) methods require extensive offline training, lack built-in uncertainty
 quantification, and struggle with conditional constraints that change over time
@@ -145,7 +145,7 @@ updates, and select actions by minimizing expected free energy. This quantity
 automatically balances goal-seeking (exploitation) with uncertainty reduction
 (exploration). The preference structure can also be made context-dependent
 (e.g., the Battery Agent's preferences shift between charging and discharging
-based on the current ToU period), providing a principled mechanism for handling
+based on the current ToU period), which handles
 conditional goals that would require ad hoc reward shaping in RL.
 
 In general, conflicting goals can arise from many sources, including
@@ -303,7 +303,7 @@ RL with a Bayesian probabilistic one \cite{zhang-202310005226}.
 \subsection{Active Inference for Home Energy Management Systems}
 
 In contrast to conventional RL and MPC, active inference employs a
-generative probabilistic model that naturally accounts for uncertainty.
+generative probabilistic model that accounts for uncertainty.
 Like MPC, active inference requires a model, although that model can
 be readily learned from data, especially if the model structure is
 known. Unlike RL, active inference models are not usually data intensive,
@@ -588,7 +588,7 @@ battery before a peak period begins.
 
 We address this by constructing \emph{predictive $B$ matrices} that are
 updated at each simulation step using available forecast information.
-This approach is a natural application of the active inference framework:
+This fits within the active inference framework:
 the $B$ matrix encodes the agent's beliefs about state transitions, and
 updating it with forecast data simply means providing the agent with
 a more accurate generative model.
@@ -624,7 +624,7 @@ The pymdp framework reuses the same $B$ matrix across all steps of a
 policy rollout. This means the one-step prediction is accurate, while
 multi-step rollouts approximate the true multi-step transition by
 repeating the one-step forecast. This approximation is acceptable
-because (i) the EFE naturally weights near-term predictions more
+because (i) the EFE weights near-term predictions more
 heavily, (ii) the same approximation is already used for the
 controlled $B$ matrix (room temperature), and (iii) even one-step
 accuracy represents a substantial improvement over the identity
@@ -634,7 +634,7 @@ assumption.
 \label{sec:cost_aware}
 
 The standard Thermostat Agent uses four state factors and has no
-direct awareness of energy costs. To enable principled cost--comfort
+direct awareness of energy costs. To enable cost--comfort
 trade-offs, we extend the generative model with a fifth state factor
 (\emph{energy demand}, discretized into 10 levels from 0 to 9~kWh)
 and a fifth observation modality (\emph{cost}, discretized into 5
@@ -685,8 +685,8 @@ candidate policies per agent per time step (81 for $T=4$, 729 for $T=6$).
 The Battery Agent employs a dynamic preference vector ($C$ vector) whose
 values shift based on the current ToU period. During off-peak periods, the
 agent prefers to charge (or hold), while during peak periods it prefers to
-discharge. This is a principled use of active inference: the preferences
-legitimately change with context, reflecting the household's conditional
+discharge. The preferences
+legitimately change with context: they encode the household's conditional
 goals. Formally, $p(o \mid C)$ in Equation~\ref{eq:EFE_decomp} is
 conditioned on the current ToU observation, so the risk term automatically
 drives the agent toward context-appropriate behavior without requiring
@@ -761,7 +761,7 @@ since both agents already adapt their preferences to the same
 environmental signals, the meta-agent provides no additional benefit in
 the current single-household setting. Empirically, all three modes
 produce identical results (Tables~\ref{tab:coordination}
-and~\ref{tab:oracle_gap}), confirming that the ToU-aware dynamic $C$
+and~\ref{tab:oracle_gap}); the ToU-aware dynamic $C$
 vectors, rather than the coordination architecture, are the primary
 driver of near-optimal performance. We retain these three modes to
 delineate the design space and to provide a clear baseline against which
@@ -770,7 +770,7 @@ be evaluated.
 
 \textbf{Federated (decentralized belief sharing).}\label{sec:federated_mode} Following Friston et al.
 \cite{friston2024federated}, agents share posterior beliefs rather than
-raw states, enabling decentralized consensus formation. This mode extends
+raw states for decentralized consensus formation. This mode extends
 the Aligned mode with three additions: a belief sharing channel, an
 auditory likelihood mapping, and a reliability meta-inference layer.
 
@@ -796,7 +796,7 @@ SoC given its own thermal state, while the Battery Agent models
 $P(o_{\text{comfort}} \mid \text{SoC})$. This ``auditory'' mapping
 follows the communication-as-observation principle from federated inference
 \cite{friston2024federated,friston2020linguistic}, and ensures that social preferences emerge
-naturally within pymdp's standard EFE computation:
+within pymdp's standard EFE computation:
 \begin{equation}
 G(\pi) = \sum_{m \in \text{self}} \left[\text{risk}_m + \text{ambiguity}_m\right]
        + \underset{G_{\text{social}}}{\underbrace{\text{risk}_{\text{aud}} + \text{ambiguity}_{\text{aud}}}}\,.
@@ -813,7 +813,7 @@ beliefs via exponential moving average:
 \label{eq:reliability}
 \end{equation}
 where $\alpha = 0.1$ is the learning rate. This reliability gates the
-effective social preference weight, ensuring that agents fall back to
+effective social preference weight, so that agents fall back to
 self-interest when the other's reports are unreliable.
 
 The belief-sharing architecture is depicted in Figure~\ref{fig:belief_sharing}.
@@ -833,14 +833,14 @@ Thermostat Agent to predict future HVAC activity over the planning horizon,
 constructing step-dependent energy transition matrices for its EFE
 computation. At each planning step $\tau$, the phantom predicts
 $P(\text{HVAC}_\tau)$ and this prediction modifies $B_{\text{energy}}$
-(Equation~\ref{eq:phantom_B}), enabling the battery to anticipate
+(Equation~\ref{eq:phantom_B}), so the battery can anticipate
 HVAC-driven cost fluctuations. Crucially, the battery also receives the
 actual HVAC action for the current step (since it acts after the
 thermostat in the cascade), eliminating prediction error at $\tau=0$ and
 relying on the phantom only for future steps. Both agents use
 predictive $B$ matrices for exogenous factors
 (Section~\ref{sec:predictive_B}) with per-step ToU schedule awareness,
-enabling them to anticipate tariff transitions across the full planning
+so that they can anticipate tariff transitions across the full planning
 horizon. This mode represents genuine Theory of Mind: each agent models
 the other's decision process without direct communication, relying on
 shared knowledge of the environment and the other's generative model
@@ -1116,12 +1116,12 @@ EcoNet's performance. MPC with a 4-step horizon (matching the AIF
 agents' policy length) achieves near-Oracle performance, as expected
 for a method with perfect model knowledge over the planning horizon.
 However, MPC requires an explicit, accurate model of system dynamics
-and does not naturally handle model uncertainty or online learning.
+and does not handle model uncertainty or online learning.
 The tabular Q-learning baseline, while achieving reasonable performance
 after 500 training episodes, requires offline training on the
 specific environment and lacks built-in uncertainty quantification.
 EcoNet's active inference agents operate without offline training,
-naturally quantify uncertainty through posterior beliefs, and can learn
+quantify uncertainty through posterior beliefs, and can learn
 unknown parameters online, advantages that matter more
 as the environment becomes less predictable.
 
@@ -1178,7 +1178,7 @@ Table~\ref{tab:climate} presents the results for both coordination modes.
 Several patterns emerge. First, winter scenarios consistently show higher
 costs and emissions than summer, primarily due to increased heating demand.
 Second, Montreal shows dramatically lower GHG emissions despite moderate
-costs, reflecting the low carbon intensity of hydroelectric generation.
+costs, due to the low carbon intensity of hydroelectric generation.
 Third, Phoenix summer shows high emissions due to the energy-intensive
 cooling demands combined with a fossil-heavy grid. Fourth, the Federated
 mode achieves cost and GHG reductions in six of eight scenarios compared
@@ -1242,7 +1242,7 @@ solar/load profiles.}\label{fig:7day_real}
 We also conducted climate sensitivity experiments using synthetic but
 climate-representative weather profiles (Figure~\ref{fig:climate_synthetic}).
 Results are qualitatively consistent with the real-weather analysis,
-confirming that synthetic data can serve as a reasonable proxy for
+which supports the use of synthetic data as a reasonable proxy for
 initial system evaluation. Figure~\ref{fig:7day_synthetic} shows the
 corresponding extended 7-day simulation with synthetic weather inputs.
 
@@ -1271,8 +1271,7 @@ perform several validation checks.
 that total energy equals the sum of baseline load, HVAC energy, battery
 energy (positive for charge, negative for discharge), and solar generation
 (negative). Across all simulations reported in this paper, the energy
-balance is satisfied exactly (to machine precision), confirming that
-no energy is created or destroyed by the control logic.
+balance is satisfied exactly (to machine precision): no energy is created or destroyed by the control logic.
 
 \textbf{Thermodynamic consistency.} The room temperature transition
 model satisfies basic thermodynamic constraints: (i) when heating is
@@ -1338,9 +1337,8 @@ centralized coordination, belief sharing, nor phantom inference adds
 substantial benefit in the single-household setting.
 The Pareto frontier (Figure~\ref{fig:pareto}) illustrates the
 cost--comfort trade-off across all conditions.
-The tabular RL baseline performs poorly (\$29.36), reflecting the
-challenge of learning effective energy management policies from scratch
-with limited training data.
+The tabular RL baseline performs poorly (\$29.36) because learning effective energy management policies from scratch
+with limited training data and coarse discretization is difficult.
 
 \begin{table}[htbp]
 \centering
@@ -1382,7 +1380,7 @@ highest cost (\$29.36) and worst comfort (341.0~$^{\circ}$C$\cdot$h),
 while the Oracle achieves the lowest cost (\$17.75) through
 perfect-foresight battery scheduling. Among active inference modes,
 all five AIF modes achieve nearly identical costs (\$19.54--\$19.58,
-approximately 10\% above Oracle), confirming that the ToU-aware dynamic
+approximately 10\% above Oracle). The ToU-aware dynamic
 preferences drive performance rather than the coordination architecture.
 
 \begin{figure}[htbp]
@@ -1399,7 +1397,7 @@ simulation).}\label{fig:coordination_bars}
 The Federated mode produces rich communication dynamics.
 Table~\ref{tab:belief_metrics} reports the key communication metrics.
 The average entropy of shared comfort beliefs (0.209~nats) indicates
-meaningful uncertainty in the thermostat's comfort assessment, confirming that agents
+meaningful uncertainty in the thermostat's comfort assessment: agents
 are genuinely sharing uncertain beliefs, not just relaying point
 estimates. Comfort belief diversity of 19.0\% shows that the
 thermostat periodically reports non-comfortable states (COLD, COOL,
@@ -1538,10 +1536,10 @@ performance ($\Delta$cost = \$0.25, $\Delta$GHG = 0.08~kg), since the
 dominant cost driver (heating) leaves little room for battery
 optimization differences. In Phoenix summer, where cooling demand
 dominates, the agent again closely tracks the Oracle ($\Delta$cost =
-\$0.21), confirming that the generative model adapts to diverse
+\$0.21), showing that the generative model adapts to diverse
 thermal conditions. The Aligned agent also achieves \emph{better}
 comfort than the Oracle in London winter (108.1 vs 127.2~$^{\circ}$C$\cdot$h),
-reflecting its strong comfort preference in the $C$ vector.
+due to its strong comfort preference in the $C$ vector.
 
 Third, the No-HEMS baseline (which includes a fixed thermostat
 but no battery management) achieves comparable comfort to the active
@@ -1551,17 +1549,16 @@ value of ToU arbitrage: battery operation incurs round-trip losses
 ($\eta = 0.9$ one-way, 81\% round-trip), but enables cost savings by
 shifting consumption from high-ToU to low-ToU periods that outweigh
 these losses. The MPC baseline (with a 6-step horizon) achieves
-near-Oracle performance, confirming that the planning problem is
+near-Oracle performance; the planning problem is
 well-conditioned when given sufficient lookahead. In London winter, MPC slightly undercuts the Oracle on cost
 (\$33.78 vs.\ \$34.01) because it re-plans at each step rather than
 optimizing globally. However, MPC's lower cost comes at worse comfort
-(123.7 vs.\ 127.2~$^{\circ}$C$\cdot$h), reflecting a different
+(123.7 vs.\ 127.2~$^{\circ}$C$\cdot$h), which represents a different
 trade-off on the Pareto frontier rather than true dominance. MPC requires a complete model of system dynamics and
 deterministic optimization, whereas the AIF agent learns its generative
 model structure and provides uncertainty quantification through
-posterior beliefs. The tabular RL baseline performs poorly, reflecting the
-challenge of learning effective policies from scratch with coarse
-state discretization.
+posterior beliefs. The tabular RL baseline performs poorly because coarse
+state discretization limits its ability to learn effective policies from scratch.
 
 Fourth, all AIF modes (Independent, Aligned, Hierarchical, Federated, ToM)
 achieve average Oracle gaps within 2.0--2.4\% of Oracle cost, with no
@@ -1572,7 +1569,7 @@ that adapt preferences to occupancy and tariff conditions, ensuring
 robust performance across climate extremes. The Independent and Aligned
 modes produce identical costs (Tables~\ref{tab:coordination}
 and~\ref{tab:oracle_gap}),
-confirming that the dynamic preference mechanism, rather than
+which shows that the dynamic preference mechanism, rather than
 inter-agent coordination, is the primary driver of cost performance.
 The coordinated modes (Federated, ToM) provide additional benefits
 through anticipatory planning: the ToM mode achieves this without any
@@ -1629,14 +1626,14 @@ maintain \$20.44 from $\sigma=0$ through $\sigma=4$ (0.0\% increase).
 MPC, by contrast, degrades by 3.8\% as it misallocates battery resources
 based on incorrect temperature predictions. In London, both AIF and MPC
 degrade similarly at high noise levels (+8.4\% and +8.5\% respectively),
-reflecting London's more variable thermal load where forecast errors
+because London's more variable thermal load means forecast errors
 affect HVAC scheduling. The Federated mode shows an anomalous decrease
 in London (--4.8\%), likely because noisy forecasts occasionally trigger
 more conservative battery scheduling that happens to align with the
 actual ToU pattern.
 
 Independent and Aligned produce identical results across all conditions,
-confirming that both modes now use the same ToU-aware dynamic $C$
+as expected since both modes use the same ToU-aware dynamic $C$
 vectors and differ only in whether inter-agent coordination mechanisms
 (belief sharing, phantom inference) are enabled. The Oracle's invariance
 (+0.0\% by definition) provides a lower bound, and AIF in Phoenix
@@ -1726,7 +1723,7 @@ RL (trained on Phoenix)    & ---                & \$23.22 $\pm$ 2.37 \\
 \end{table}
 
 RL trained on London degrades by 11.8\% when transferred to Phoenix,
-reflecting overfitting to London's thermal dynamics and ToU patterns.
+due to overfitting to London's thermal dynamics and ToU patterns.
 Even RL trained \emph{on} Phoenix (\$23.22) underperforms AIF (\$20.44),
 and exhibits substantially higher variance ($\pm$\$2.37 vs.\
 $\pm$\$0.44). AIF achieves 0\% transfer degradation because its
@@ -1775,8 +1772,8 @@ advantage over a fixed-thermostat baseline reaches 17\% in mild climates.
 This near-optimal performance arises from ToU-aware dynamic $C$ vectors
 and predictive $B$ matrices that enable the agent to anticipate
 environmental changes within its planning horizon. MPC with a 6-step horizon achieves near-Oracle performance,
-confirming that the planning problem is well-conditioned when given
-sufficient lookahead; the advantage of AIF lies in its probabilistic
+the planning problem is well-conditioned when given
+sufficient lookahead, and the advantage of AIF lies in its probabilistic
 framework and uncertainty quantification rather than in raw performance.
 All AIF modes, including Independent, achieve near-Oracle
 performance through ToU-aware dynamic $C$ vectors. The Federated and
@@ -1794,11 +1791,11 @@ decentralized consensus about shared world states. The magnitude of
 the benefit depends on the degree of coordination opportunity in the
 environment. The auditory A matrix formulation
 (described in Section~\ref{sec:coordination}) ensures that social preferences
-emerge naturally within the standard EFE computation
+emerge within the standard EFE computation
 (Equation~\ref{eq:social_efe}), requiring no additional optimization
 objective or hand-tuned coordination mechanism. The reliability parameter
-(Equation~\ref{eq:reliability}) provides a principled mechanism for trust
-calibration, allowing agents to discount unreliable reports.
+(Equation~\ref{eq:reliability}) provides a mechanism for trust
+calibration, letting agents discount unreliable reports.
 
 The ToM mode provides an alternative path to coordination: rather than
 communicating beliefs directly, each agent maintains a phantom model
@@ -1813,7 +1810,7 @@ channel, making it suitable for settings where inter-agent messaging
 is unavailable or unreliable.
 
 The predictive $B$ matrix approach (Section~\ref{sec:predictive_B})
-demonstrates a principled way to incorporate forecast information into
+demonstrates how to incorporate forecast information into
 the active inference framework. Rather than treating exogenous state
 dynamics as unknown or static, agents update their transition
 beliefs using available information (published tariff schedules,
@@ -1822,8 +1819,8 @@ is consistent with the active inference principle that an agent should
 maintain the most accurate generative model possible: forecast data
 simply provides better priors on state transitions. The Gaussian
 kernel for outdoor temperature (Equation~\ref{eq:predictive_B_temp})
-naturally encodes forecast uncertainty, with the spread parameter
-$\sigma$ reflecting confidence in the weather prediction.
+encodes forecast uncertainty, with the spread parameter
+$\sigma$ controlling confidence in the weather prediction.
 
 The ToM mode's phantom-based architecture demonstrates how inter-agent
 prediction can be integrated into the active inference framework. The
@@ -1879,7 +1876,7 @@ while tabular Q-learning requires 20,000 episodes and still incurs
 without retraining (0\% transfer degradation), while RL policies
 overfit to training conditions (11.8\% degradation from London to
 Phoenix). Third, AIF exhibits substantially lower variance across
-seeds ($\pm$\$0.44 vs.\ $\pm$\$2.37), reflecting the stability of
+seeds ($\pm$\$0.44 vs.\ $\pm$\$2.37), which indicates the stability of
 model-based planning compared to value-function estimation. These
 results suggest that model-based active inference outperforms
 model-free RL for energy management, where the physical dynamics
@@ -1933,9 +1930,9 @@ a continuous state space and test the model using data generated from
 real buildings or accurate digital twins. Although our aim is to coordinate
 energy management across households, the current model only considers
 management within a single building. Extension to neighborhoods or
-building clusters would naturally expand our two-agent model to a
+building clusters would expand our two-agent model to a
 many-agent approach. The belief-sharing architecture presented here
-provides a natural foundation for such scaling, as each agent need only
+provides a foundation for such scaling, as each agent need only
 communicate with its immediate neighbors rather than a central coordinator
 \cite{friston2024federated}. While our predictive $B$ matrices already
 incorporate weather forecasts and known schedules, future efforts could
@@ -1947,11 +1944,11 @@ tensor networks could be interesting here due to their capacity to
 capture scale-invariance and compress data associated with high dimensional
 functions, including probability functions \cite{Friston-2025,Roa-2024}.
 The reliability mechanism could be extended to learn the auditory
-A matrix itself, allowing agents to adaptively model each other's
+A matrix itself, so that agents adaptively model each other's
 communication patterns, a form of hierarchical active inference
 \cite{pezzulo2018hierarchical,poppel2022resonating} applied to
 social cognition. The ToM mode's phantom inference could be enriched
-by allowing the phantom to learn from observation (i.e., updating
+by having the phantom learn from observation (i.e., updating
 the phantom's beliefs based on observed energy consumption patterns),
 creating a fully adaptive Theory of Mind.
 Finally, it would be interesting to apply an active inference model
@@ -1985,7 +1982,7 @@ climate conditions without retraining, and achieves coordination benefits
 through both phantom inference (ToM) and belief sharing (Federated). The
 comparison with Oracle, MPC, and RL baselines shows active
 inference's advantages: online learning without offline
-training, principled uncertainty quantification, and interpretable
+training, built-in uncertainty quantification, and interpretable
 preference structures through $C$ vectors. Uncertainty robustness experiments confirm that AIF maintains stable
 costs under forecast noise (0\% degradation in Phoenix at
 $\sigma = 4$~$^{\circ}$C, vs.\ 3.8\% for MPC). A systematic RL
